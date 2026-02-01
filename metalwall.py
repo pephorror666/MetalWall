@@ -555,7 +555,7 @@ def main():
     # ============ Header ============
     col1, col2 = st.columns([0.8, 0.2])
     with col1:
-        st.title("🤘 Metal Music Social")
+        st.title("🤘 MetalWall")
     with col2:
         if st.session_state.current_user:
             if st.button("🚪 Salir"):

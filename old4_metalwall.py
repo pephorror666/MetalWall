@@ -503,25 +503,19 @@ def display_album_post(album):
             like_col, delete_col = st.columns([2, 1])
             
             with like_col:
-                # Only show like button if user is not guest
-                if st.session_state.current_user != "guest":
-                    # Like button with count displayed next to it
-                    like_text = f"{'❤️' if is_liked else '🤍'} {current_likes}"
-                    if st.button(like_text, key=f"like_{album['id']}", 
-                               help="Like", use_container_width=True):
-                        if is_liked:
-                            likes.remove(st.session_state.current_user)
-                        else:
-                            likes.append(st.session_state.current_user)
-                        update_album_likes(album['id'], likes)
-                        st.rerun()
-                else:
-                    # For guest, just show the likes count
-                    st.markdown(f"❤️ {current_likes}")
+                # Like button with count displayed next to it
+                like_text = f"{'❤️' if is_liked else '🤍'} {current_likes}"
+                if st.button(like_text, key=f"like_{album['id']}", 
+                           help="Like", use_container_width=True):
+                    if is_liked:
+                        likes.remove(st.session_state.current_user)
+                    else:
+                        likes.append(st.session_state.current_user)
+                    update_album_likes(album['id'], likes)
+                    st.rerun()
             
             with delete_col:
-                # Show delete button for Admin (can delete any post) or for the post owner
-                if st.session_state.current_user == "Admin" or st.session_state.current_user == username:
+                if st.session_state.current_user == username:
                     if st.button("🗑️", key=f"delete_{album['id']}", 
                                help="Delete", use_container_width=True):
                         delete_album(album['id'])
@@ -559,8 +553,8 @@ def display_concert_post(concert):
     
     st.caption(f'{get_time_ago(timestamp)} • @{username}')
     
-    # Show delete button for Admin (can delete any post) or for the post owner
-    if st.session_state.current_user == "Admin" or st.session_state.current_user == concert['username']:
+    # Only delete button, no tags or like
+    if st.session_state.current_user == concert['username']:
         if st.button("🗑️", key=f"delete_concert_{concert['id']}", help="Delete"):
             delete_concert(concert['id'])
             st.rerun()
@@ -600,8 +594,6 @@ def main():
                     st.error("❌ Invalid credentials")
         else:
             st.success(f"✅ Connected as @{st.session_state.current_user}")
-            if st.session_state.current_user == "guest":
-                st.info("👀 Guest user - View only mode")
         
         st.divider()
         
@@ -620,7 +612,7 @@ def main():
         st.warning("⚠️ Please login first")
         return
     
-    # ============ PAGE: RECORDS ============
+    # ============ PAGE: FEED ============
     if page == "💿 Records":
         st.subheader("💿 Records Wall")
         albums = load_albums()
@@ -647,78 +639,74 @@ def main():
     elif page == "🎵 New Post":
         st.subheader("🎵 New Post")
         
-        # Check if user is guest
-        if st.session_state.current_user == "guest":
-            st.warning("👀 Guest users cannot create new posts. Please login with a regular account.")
-        else:
-            # Create two columns for the two input methods
-            col1, col2 = st.columns(2)
+        # Create two columns for the two input methods
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("### Automatic (from URL)")
+            st.write("Paste a URL of your favorite album")
             
-            with col1:
-                st.write("### Automatic (from URL)")
-                st.write("Paste a URL of your favorite album")
+            with st.form("album_form_auto"):
+                url = st.text_input("Album URL", placeholder="https://open.spotify.com/album/...", key="auto_url")
+                tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags", key="auto_tags")
+                submitted_auto = st.form_submit_button("🚀 Share from URL", use_container_width=True)
                 
-                with st.form("album_form_auto"):
-                    url = st.text_input("Album URL", placeholder="https://open.spotify.com/album/...", key="auto_url")
-                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags", key="auto_tags")
-                    submitted_auto = st.form_submit_button("🚀 Share from URL", use_container_width=True)
-                    
-                    if submitted_auto:
-                        if url:
-                            with st.spinner("⏳ Extracting metadata..."):
-                                metadata = extract_og_metadata(url)
-                                if metadata:
-                                    tags = process_tags(tags_input)
-                                    if save_album(
-                                        st.session_state.current_user,
-                                        url,
-                                        metadata['artist'],
-                                        metadata['album_name'],
-                                        metadata['cover_url'],
-                                        metadata['platform'],
-                                        tags
-                                    ):
-                                        st.success("✅ Album shared!")
-                                        st.rerun()
-                                    else:
-                                        st.error("❌ Error saving")
+                if submitted_auto:
+                    if url:
+                        with st.spinner("⏳ Extracting metadata..."):
+                            metadata = extract_og_metadata(url)
+                            if metadata:
+                                tags = process_tags(tags_input)
+                                if save_album(
+                                    st.session_state.current_user,
+                                    url,
+                                    metadata['artist'],
+                                    metadata['album_name'],
+                                    metadata['cover_url'],
+                                    metadata['platform'],
+                                    tags
+                                ):
+                                    st.success("✅ Album shared!")
+                                    st.rerun()
                                 else:
-                                    st.error("❌ Could not extract metadata. Verify the URL or use Manual Input")
-                        else:
-                            st.warning("⚠️ Please paste a valid URL")
-            
-            with col2:
-                st.write("### Manual Input")
-                st.write("For platforms without automatic metadata")
-                
-                with st.form("album_form_manual"):
-                    artist = st.text_input("Artist", placeholder="Artist name", key="manual_artist")
-                    album_name = st.text_input("Album Name", placeholder="Album title", key="manual_album")
-                    url = st.text_input("Album URL", placeholder="https://...", key="manual_url")
-                    cover_url = st.text_input("Cover URL (optional)", placeholder="https://...", key="manual_cover")
-                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags", key="manual_tags")
-                    submitted_manual = st.form_submit_button("📝 Share Manually", use_container_width=True)
-                    
-                    if submitted_manual:
-                        if artist and album_name and url:
-                            tags = process_tags(tags_input)
-                            if save_album(
-                                st.session_state.current_user,
-                                url,
-                                artist,
-                                album_name,
-                                cover_url,
-                                "Other",  # Set to "Other" by default
-                                tags
-                            ):
-                                st.success("✅ Album shared!")
-                                st.rerun()
+                                    st.error("❌ Error saving")
                             else:
-                                st.error("❌ Error saving")
+                                st.error("❌ Could not extract metadata. Verify the URL or use Manual Input")
+                    else:
+                        st.warning("⚠️ Please paste a valid URL")
+        
+        with col2:
+            st.write("### Manual Input")
+            st.write("For platforms without automatic metadata")
+            
+            with st.form("album_form_manual"):
+                artist = st.text_input("Artist", placeholder="Artist name", key="manual_artist")
+                album_name = st.text_input("Album Name", placeholder="Album title", key="manual_album")
+                url = st.text_input("Album URL", placeholder="https://...", key="manual_url")
+                cover_url = st.text_input("Cover URL (optional)", placeholder="https://...", key="manual_cover")
+                tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags", key="manual_tags")
+                submitted_manual = st.form_submit_button("📝 Share Manually", use_container_width=True)
+                
+                if submitted_manual:
+                    if artist and album_name and url:
+                        tags = process_tags(tags_input)
+                        if save_album(
+                            st.session_state.current_user,
+                            url,
+                            artist,
+                            album_name,
+                            cover_url,
+                            "Other",  # Set to "Other" by default
+                            tags
+                        ):
+                            st.success("✅ Album shared!")
+                            st.rerun()
                         else:
-                            st.warning("⚠️ Artist, Album Name, and Album URL are required")
+                            st.error("❌ Error saving")
+                    else:
+                        st.warning("⚠️ Artist, Album Name, and Album URL are required")
     
-    # ============ PAGE: GIGS ============
+    # ============ PAGE: CONCERTS ============
     elif page == "🎸 Gigs":
         st.subheader("🎸 Gigs")
         delete_past_concerts()
@@ -727,12 +715,10 @@ def main():
         with col1:
             st.write("Upcoming metal events")
         with col2:
-            # Only show New Concert button if user is not guest
-            if st.session_state.current_user != "guest":
-                if st.button("➕ New Concert"):
-                    st.session_state.show_concert_form = not st.session_state.show_concert_form
+            if st.button("➕ New Concert"):
+                st.session_state.show_concert_form = not st.session_state.show_concert_form
         
-        if st.session_state.show_concert_form and st.session_state.current_user != "guest":
+        if st.session_state.show_concert_form:
             with st.form("concert_form"):
                 bands = st.text_input("Bands", placeholder="Separate with commas")
                 date = st.date_input("Date")
@@ -796,45 +782,22 @@ def main():
         my_albums = [a for a in albums if a['username'] == st.session_state.current_user]
         my_concerts = [c for c in concerts if c['username'] == st.session_state.current_user]
         
-        # Get liked albums and concerts
-        liked_albums = [a for a in albums if st.session_state.current_user in a.get('likes', [])]
-        liked_concerts = [c for c in concerts if st.session_state.current_user in c.get('likes', [])]
-        
-        # Show counts
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("🎵 My Albums", len(my_albums))
-        with col2:
-            st.metric("🎸 My Gigs", len(my_concerts))
-        with col3:
-            st.metric("❤️ Liked Albums", len(liked_albums))
-        with col4:
-            st.metric("🤘 Liked Gigs", len(liked_concerts))
+        # Removed the user stats section (the three columns with metrics)
         
         st.divider()
         
-        if my_albums:
-            st.write("### 🎵 My Albums")
-            for album in my_albums:
-                display_album_post(album)
-        
-        if liked_albums and st.session_state.current_user != "guest":
-            st.write("### ❤️ Liked Albums")
-            for album in liked_albums:
-                display_album_post(album)
-        
-        if my_concerts:
-            st.write("### 🎸 My Gigs")
-            for concert in my_concerts:
-                display_concert_post(concert)
-        
-        if liked_concerts and st.session_state.current_user != "guest":
-            st.write("### 🤘 Liked Gigs")
-            for concert in liked_concerts:
-                display_concert_post(concert)
-        
-        if not my_albums and not my_concerts and not liked_albums and not liked_concerts:
-            st.info("📭 You haven't shared or liked anything yet")
+        if my_albums or my_concerts:
+            if my_albums:
+                st.write("### 🎵 My Albums")
+                for album in my_albums:
+                    display_album_post(album)
+            
+            if my_concerts:
+                st.write("### 🎸 My Gigs")
+                for concert in my_concerts:
+                    display_concert_post(concert)
+        else:
+            st.info("📭 You haven't shared anything yet")
 
 # ===========================
 # RUN APP

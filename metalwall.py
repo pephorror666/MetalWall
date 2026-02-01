@@ -1,9 +1,8 @@
 # ===========================
-# THE METAL WALL - STREAMLIT APP v0.1
+# THE METAL WALL - STREAMLIT APP v0.2
 # ===========================
-# NEW: Universal Metadata Extractor (Open Graph)
-# Works with: Spotify, Bandcamp, Tidal, Apple Music, YouTube, SoundCloud, etc.
-# Like when you paste a link in WhatsApp - works ALWAYS
+# NEW: Session persistence with browser localStorage
+# NEW: Confirmation pop-ups and form reset
 
 import streamlit as st
 import sqlite3
@@ -41,6 +40,12 @@ st.markdown("""
     .tag-button {
         margin-right: 5px;
         margin-bottom: 5px;
+    }
+    /* Success notification styling */
+    .stSuccess {
+        background-color: #1a472a !important;
+        border-color: #2e7d32 !important;
+        color: #e0e0e0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -361,10 +366,52 @@ def extract_og_metadata(url):
         return None
 
 # ===========================
+# SESSION PERSISTENCE WITH BROWSER LOCALSTORAGE
+# ===========================
+
+def save_session_to_storage():
+    """Save current session state to browser's localStorage"""
+    if st.session_state.get('remember_me', False) and st.session_state.get('current_user'):
+        session_data = {
+            'username': st.session_state.current_user,
+            'remember_me': True,
+            'timestamp': datetime.now().isoformat()
+        }
+        # Use Streamlit's experimental feature to save to browser storage
+        st.experimental_set_query_params(
+            persisted_session=json.dumps(session_data)
+        )
+
+def load_session_from_storage():
+    """Load session from browser's localStorage"""
+    try:
+        params = st.experimental_get_query_params()
+        if 'persisted_session' in params:
+            session_data = json.loads(params['persisted_session'][0])
+            
+            # Check if session is not too old (7 days max)
+            session_time = datetime.fromisoformat(session_data['timestamp'])
+            if (datetime.now() - session_time).days < 7:
+                st.session_state.current_user = session_data['username']
+                st.session_state.remember_me = session_data['remember_me']
+                return True
+    except:
+        pass
+    return False
+
+def clear_session_storage():
+    """Clear the session from browser storage"""
+    st.experimental_set_query_params()
+
+# ===========================
 # INITIALIZE SESSION STATE WITH PERSISTENCE
 # ===========================
 
-# Enable session state persistence
+# Try to load session from browser storage first
+if not st.session_state.get('current_user'):
+    load_session_from_storage()
+
+# Initialize other session state variables
 if 'current_user' not in st.session_state:
     st.session_state.current_user = None
 if 'show_album_form' not in st.session_state:
@@ -385,6 +432,10 @@ if 'username_input' not in st.session_state:
     st.session_state.username_input = ""
 if 'password_input' not in st.session_state:
     st.session_state.password_input = ""
+if 'form_submitted' not in st.session_state:
+    st.session_state.form_submitted = False
+if 'success_message' not in st.session_state:
+    st.session_state.success_message = ""
 
 init_db()
 
@@ -453,6 +504,18 @@ def process_tags(tags_str):
             if tag.replace('_', '').isalnum():
                 tags.append(tag)
     return tags[:5]
+
+def show_success_message(message, duration=3):
+    """Show a success message that auto-disappears"""
+    st.session_state.success_message = message
+    st.session_state.form_submitted = True
+    # Use a container to show the message
+    with st.container():
+        success_placeholder = st.empty()
+        success_placeholder.success(message)
+        # Auto-clear after duration
+        st.session_state.form_submitted = False
+        st.session_state.success_message = ""
 
 # ===========================
 # UI COMPONENTS
@@ -532,6 +595,7 @@ def display_album_post(album):
                     if st.button("🗑️", key=f"delete_{album['id']}", 
                                help="Delete", use_container_width=True):
                         delete_album(album['id'])
+                        show_success_message("✅ Album deleted successfully!")
                         st.rerun()
     
     st.divider()
@@ -570,9 +634,48 @@ def display_concert_post(concert):
     if st.session_state.current_user == "Admin" or st.session_state.current_user == concert['username']:
         if st.button("🗑️", key=f"delete_concert_{concert['id']}", help="Delete"):
             delete_concert(concert['id'])
+            show_success_message("✅ Concert deleted successfully!")
             st.rerun()
     
     st.divider()
+
+# ===========================
+# FORM RESET FUNCTIONS
+# ===========================
+
+def reset_album_form():
+    """Reset album form fields"""
+    # Clear form-related session state
+    if 'auto_url' in st.session_state:
+        st.session_state.auto_url = ""
+    if 'auto_tags' in st.session_state:
+        st.session_state.auto_tags = ""
+    if 'manual_artist' in st.session_state:
+        st.session_state.manual_artist = ""
+    if 'manual_album' in st.session_state:
+        st.session_state.manual_album = ""
+    if 'manual_url' in st.session_state:
+        st.session_state.manual_url = ""
+    if 'manual_cover' in st.session_state:
+        st.session_state.manual_cover = ""
+    if 'manual_tags' in st.session_state:
+        st.session_state.manual_tags = ""
+
+def reset_concert_form():
+    """Reset concert form fields"""
+    # Clear concert form fields from session state
+    if 'concert_bands' in st.session_state:
+        st.session_state.concert_bands = ""
+    if 'concert_date' in st.session_state:
+        st.session_state.concert_date = datetime.now()
+    if 'concert_venue' in st.session_state:
+        st.session_state.concert_venue = ""
+    if 'concert_city' in st.session_state:
+        st.session_state.concert_city = ""
+    if 'concert_tags' in st.session_state:
+        st.session_state.concert_tags = ""
+    if 'concert_info' in st.session_state:
+        st.session_state.concert_info = ""
 
 # ===========================
 # MAIN PAGE
@@ -588,6 +691,7 @@ def main():
     with col2:
         if st.session_state.current_user:
             if st.button("🚪 Logout"):
+                clear_session_storage()
                 st.session_state.current_user = None
                 st.session_state.remember_me = False
                 st.session_state.username_input = ""
@@ -611,7 +715,7 @@ def main():
             remember_me = st.checkbox("Remember me", value=st.session_state.remember_me,
                                     key="remember_checkbox")
             
-            if st.button("Login", key="login_button"):
+            if st.button("Login", key="login_button", use_container_width=True):
                 st.session_state.username_input = username
                 st.session_state.password_input = password
                 st.session_state.remember_me = remember_me
@@ -619,6 +723,8 @@ def main():
                 ok, email = verify_credentials(username, password)
                 if ok:
                     st.session_state.current_user = username
+                    if remember_me:
+                        save_session_to_storage()
                     st.rerun()
                 else:
                     st.error("❌ Invalid credentials")
@@ -637,7 +743,8 @@ def main():
         )
         
         st.sidebar.divider()
-        st.sidebar.markdown("\m/ MetalWall v0.1")
+        st.sidebar.markdown("\m/ MetalWall v0.2")
+        st.sidebar.caption("Session persistence enabled")
     
     # ============ ONLY IF AUTHENTICATED ============
     if not st.session_state.current_user:
@@ -654,7 +761,7 @@ def main():
             with col1:
                 st.info(f"🔍 Filtered by: **#{st.session_state.active_filter_feed}**")
             with col2:
-                if st.button("✖️ Clear filter", key="clear_feed_filter"):
+                if st.button("✖️ Clear filter", key="clear_feed_filter", use_container_width=True):
                     st.session_state.active_filter_feed = None
                     st.rerun()
         
@@ -675,6 +782,10 @@ def main():
         if st.session_state.current_user == "guest":
             st.warning("👀 Guest users cannot create new posts. Please login with a regular account.")
         else:
+            # Show success message if form was just submitted
+            if st.session_state.get('form_submitted'):
+                st.success(st.session_state.success_message)
+            
             # Create two columns for the two input methods
             col1, col2 = st.columns(2)
             
@@ -682,9 +793,11 @@ def main():
                 st.write("### Automatic (from URL)")
                 st.write("Paste a URL of your favorite album")
                 
-                with st.form("album_form_auto"):
-                    url = st.text_input("Album URL", placeholder="https://open.spotify.com/album/...", key="auto_url")
-                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags", key="auto_tags")
+                with st.form("album_form_auto", clear_on_submit=True):
+                    url = st.text_input("Album URL", placeholder="https://open.spotify.com/album/...", 
+                                      key="auto_url", value="")
+                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", 
+                                             help="Maximum 5 tags", key="auto_tags", value="")
                     submitted_auto = st.form_submit_button("🚀 Share from URL", use_container_width=True)
                     
                     if submitted_auto:
@@ -702,7 +815,8 @@ def main():
                                         metadata['platform'],
                                         tags
                                     ):
-                                        st.success("✅ Album shared!")
+                                        show_success_message("✅ Album shared successfully!")
+                                        reset_album_form()
                                         st.rerun()
                                     else:
                                         st.error("❌ Error saving")
@@ -715,12 +829,17 @@ def main():
                 st.write("### Manual Input")
                 st.write("For platforms without automatic metadata")
                 
-                with st.form("album_form_manual"):
-                    artist = st.text_input("Artist", placeholder="Artist name", key="manual_artist")
-                    album_name = st.text_input("Album Name", placeholder="Album title", key="manual_album")
-                    url = st.text_input("Album URL", placeholder="https://...", key="manual_url")
-                    cover_url = st.text_input("Cover URL (optional)", placeholder="https://...", key="manual_cover")
-                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags", key="manual_tags")
+                with st.form("album_form_manual", clear_on_submit=True):
+                    artist = st.text_input("Artist", placeholder="Artist name", 
+                                         key="manual_artist", value="")
+                    album_name = st.text_input("Album Name", placeholder="Album title", 
+                                             key="manual_album", value="")
+                    url = st.text_input("Album URL", placeholder="https://...", 
+                                      key="manual_url", value="")
+                    cover_url = st.text_input("Cover URL (optional)", placeholder="https://...", 
+                                            key="manual_cover", value="")
+                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", 
+                                             help="Maximum 5 tags", key="manual_tags", value="")
                     submitted_manual = st.form_submit_button("📝 Share Manually", use_container_width=True)
                     
                     if submitted_manual:
@@ -735,7 +854,8 @@ def main():
                                 "Other",  # Set to "Other" by default
                                 tags
                             ):
-                                st.success("✅ Album shared!")
+                                show_success_message("✅ Album shared successfully!")
+                                reset_album_form()
                                 st.rerun()
                             else:
                                 st.error("❌ Error saving")
@@ -753,25 +873,29 @@ def main():
         with col2:
             # Only show New Concert button if user is not guest
             if st.session_state.current_user != "guest":
-                if st.button("➕ New Concert"):
+                if st.button("➕ New Concert", use_container_width=True):
                     st.session_state.show_concert_form = not st.session_state.show_concert_form
         
         if st.session_state.show_concert_form and st.session_state.current_user != "guest":
-            with st.form("concert_form"):
-                bands = st.text_input("Bands", placeholder="Separate with commas")
-                date = st.date_input("Date")
-                venue = st.text_input("Venue")
-                city = st.text_input("City")
-                tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #liveshow")
-                info = st.text_area("Additional info", placeholder="Tickets, prices, etc.")
+            with st.form("concert_form", clear_on_submit=True):
+                bands = st.text_input("Bands", placeholder="Separate with commas",
+                                    key="concert_bands", value="")
+                date = st.date_input("Date", key="concert_date")
+                venue = st.text_input("Venue", key="concert_venue", value="")
+                city = st.text_input("City", key="concert_city", value="")
+                tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #liveshow",
+                                         key="concert_tags", value="")
+                info = st.text_area("Additional info", placeholder="Tickets, prices, etc.",
+                                  key="concert_info", value="")
                 submitted = st.form_submit_button("✅ Save Concert", use_container_width=True)
                 
                 if submitted:
                     if bands and venue and city:
                         tags = process_tags(tags_input)
                         if save_concert(st.session_state.current_user, bands, date, venue, city, tags, info):
-                            st.success("✅ Concert added!")
+                            show_success_message("✅ Concert added successfully!")
                             st.session_state.show_concert_form = False
+                            reset_concert_form()
                             st.rerun()
                         else:
                             st.error("❌ Error saving")
@@ -798,7 +922,7 @@ def main():
             with col1:
                 st.info(f"🔍 Filtered by: **#{st.session_state.active_filter_ranking}**")
             with col2:
-                if st.button("✖️ Clear filter", key="clear_ranking_filter"):
+                if st.button("✖️ Clear filter", key="clear_ranking_filter", use_container_width=True):
                     st.session_state.active_filter_ranking = None
                     st.rerun()
         

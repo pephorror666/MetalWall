@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import json
 import re
+from streamlit_cookies_manager import CookieManager
 
 # ===========================
 # STREAMLIT CONFIGURATION
@@ -23,6 +24,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Initialize Cookie Manager
+cookies = CookieManager()
 
 # Elegant dark theme
 st.markdown("""
@@ -361,34 +365,6 @@ def extract_og_metadata(url):
         return None
 
 # ===========================
-# INITIALIZE SESSION STATE WITH PERSISTENCE
-# ===========================
-
-# Enable session state persistence
-if 'current_user' not in st.session_state:
-    st.session_state.current_user = None
-if 'show_album_form' not in st.session_state:
-    st.session_state.show_album_form = False
-if 'show_concert_form' not in st.session_state:
-    st.session_state.show_concert_form = False
-if 'active_filter_feed' not in st.session_state:
-    st.session_state.active_filter_feed = None
-if 'active_filter_ranking' not in st.session_state:
-    st.session_state.active_filter_ranking = None
-if 'active_filter_concerts' not in st.session_state:
-    st.session_state.active_filter_concerts = None
-if 'show_manual_input' not in st.session_state:
-    st.session_state.show_manual_input = False
-if 'remember_me' not in st.session_state:
-    st.session_state.remember_me = False
-if 'username_input' not in st.session_state:
-    st.session_state.username_input = ""
-if 'password_input' not in st.session_state:
-    st.session_state.password_input = ""
-
-init_db()
-
-# ===========================
 # AUTHENTICATION FUNCTIONS
 # ===========================
 
@@ -581,6 +557,34 @@ def display_concert_post(concert):
 def main():
     """Main app function"""
     
+    # Initialize database
+    init_db()
+    
+    # ============ Cookie-based session initialization ============
+    if not cookies.ready():
+        st.stop()
+    
+    # Check for existing login cookie
+    if 'current_user' not in st.session_state:
+        # Try to get username from cookie
+        username_cookie = cookies.get('metalwall_username')
+        if username_cookie:
+            st.session_state.current_user = username_cookie
+        else:
+            st.session_state.current_user = None
+    
+    # Initialize other session state variables
+    if 'show_album_form' not in st.session_state:
+        st.session_state.show_album_form = False
+    if 'show_concert_form' not in st.session_state:
+        st.session_state.show_concert_form = False
+    if 'active_filter_feed' not in st.session_state:
+        st.session_state.active_filter_feed = None
+    if 'active_filter_ranking' not in st.session_state:
+        st.session_state.active_filter_ranking = None
+    if 'active_filter_concerts' not in st.session_state:
+        st.session_state.active_filter_concerts = None
+    
     # ============ Header ============
     col1, col2 = st.columns([0.8, 0.2])
     with col1:
@@ -588,10 +592,11 @@ def main():
     with col2:
         if st.session_state.current_user:
             if st.button("🚪 Logout"):
+                # Clear session state
                 st.session_state.current_user = None
-                st.session_state.remember_me = False
-                st.session_state.username_input = ""
-                st.session_state.password_input = ""
+                # Clear cookies
+                cookies.delete('metalwall_username')
+                cookies.delete('metalwall_remember')
                 st.rerun()
     
     # ============ Sidebar - Authentication ============
@@ -600,25 +605,36 @@ def main():
         if not st.session_state.current_user:
             st.subheader("Login")
             
-            # Use session state to remember input values
-            username = st.text_input("Username", value=st.session_state.username_input, 
-                                   key="username_field")
-            password = st.text_input("Password", type="password", 
-                                   value=st.session_state.password_input,
-                                   key="password_field")
+            # Check for remember me cookie
+            remember_cookie = cookies.get('metalwall_remember')
+            default_username = ""
+            default_remember = False
+            
+            if remember_cookie == "true":
+                default_username = cookies.get('metalwall_username') or ""
+                default_remember = True
+            
+            username = st.text_input("Username", value=default_username)
+            password = st.text_input("Password", type="password")
             
             # Remember me checkbox
-            remember_me = st.checkbox("Remember me", value=st.session_state.remember_me,
-                                    key="remember_checkbox")
+            remember_me = st.checkbox("Remember me", value=default_remember)
             
-            if st.button("Login", key="login_button"):
-                st.session_state.username_input = username
-                st.session_state.password_input = password
-                st.session_state.remember_me = remember_me
-                
+            if st.button("Login"):
                 ok, email = verify_credentials(username, password)
                 if ok:
+                    # Set session state
                     st.session_state.current_user = username
+                    
+                    # Set cookies if remember me is checked
+                    if remember_me:
+                        cookies['metalwall_username'] = username
+                        cookies['metalwall_remember'] = "true"
+                    else:
+                        # Clear remember cookies
+                        cookies.delete('metalwall_username')
+                        cookies.delete('metalwall_remember')
+                    
                     st.rerun()
                 else:
                     st.error("❌ Invalid credentials")
@@ -820,20 +836,17 @@ def main():
         my_albums = [a for a in albums if a['username'] == st.session_state.current_user]
         my_concerts = [c for c in concerts if c['username'] == st.session_state.current_user]
         
-        # Get liked albums and concerts
+        # Get liked albums (removed liked concerts since gigs can't be liked)
         liked_albums = [a for a in albums if st.session_state.current_user in a.get('likes', [])]
-        liked_concerts = [c for c in concerts if st.session_state.current_user in c.get('likes', [])]
         
-        # Show counts
-        col1, col2, col3, col4 = st.columns(4)
+        # Show counts - removed "Liked Gigs" metric
+        col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("🎵 My Albums", len(my_albums))
         with col2:
             st.metric("🎸 My Gigs", len(my_concerts))
         with col3:
             st.metric("❤️ Liked Albums", len(liked_albums))
-        with col4:
-            st.metric("🤘 Liked Gigs", len(liked_concerts))
         
         st.divider()
         
@@ -852,12 +865,7 @@ def main():
             for concert in my_concerts:
                 display_concert_post(concert)
         
-        if liked_concerts and st.session_state.current_user != "guest":
-            st.write("### 🤘 Liked Gigs")
-            for concert in liked_concerts:
-                display_concert_post(concert)
-        
-        if not my_albums and not my_concerts and not liked_albums and not liked_concerts:
+        if not my_albums and not my_concerts and not liked_albums:
             st.info("📭 You haven't shared or liked anything yet")
 
 # ===========================

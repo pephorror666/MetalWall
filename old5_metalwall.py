@@ -1,10 +1,9 @@
 # ===========================
-# THE METAL WALL - STREAMLIT APP v0.3
+# THE METAL WALL - STREAMLIT APP v0.2
 # ===========================
 # NEW: Session persistence with browser localStorage
 # NEW: Confirmation pop-ups and form reset
 # NEW: Guest browsing without login
-# NEW: Admin database backup/restore tools
 
 import streamlit as st
 import sqlite3
@@ -13,10 +12,6 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import json
 import re
-import os
-import shutil
-import tempfile
-import zipfile
 
 # ===========================
 # STREAMLIT CONFIGURATION
@@ -59,13 +54,6 @@ st.markdown("""
         border-radius: 5px;
         margin: 10px 0;
         border-left: 4px solid #4299e1;
-    }
-    .admin-tools {
-        background-color: #1a1a2e;
-        padding: 15px;
-        border-radius: 8px;
-        border: 1px solid #4a4a6a;
-        margin: 10px 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -271,175 +259,6 @@ def delete_past_concerts():
         conn.close()
     except Exception as e:
         st.error(f"Error cleaning concerts: {e}")
-
-# ===========================
-# ADMIN DATABASE BACKUP/RESTORE
-# ===========================
-
-def export_database_to_json():
-    """Export entire database to JSON format"""
-    try:
-        albums = load_albums()
-        concerts = load_concerts()
-        
-        export_data = {
-            'export_date': datetime.now().isoformat(),
-            'app_version': 'MetalWall v0.3',
-            'albums_count': len(albums),
-            'concerts_count': len(concerts),
-            'albums': albums,
-            'concerts': concerts
-        }
-        
-        # Convert datetime objects to strings
-        json_str = json.dumps(export_data, indent=2, default=str)
-        return json_str
-    except Exception as e:
-        st.error(f"Error exporting database: {e}")
-        return None
-
-def import_database_from_json(json_data):
-    """Import database from JSON"""
-    try:
-        data = json.loads(json_data)
-        
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        
-        # Clear existing data
-        c.execute('DELETE FROM albums')
-        c.execute('DELETE FROM concerts')
-        
-        # Import albums
-        for album in data.get('albums', []):
-            c.execute('''
-            INSERT INTO albums (id, username, url, artist, album_name, cover_url, 
-                              platform, tags, likes, timestamp, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                album['id'],
-                album['username'],
-                album['url'],
-                album['artist'],
-                album['album_name'],
-                album.get('cover_url', ''),
-                album.get('platform', 'Other'),
-                str(album.get('tags', [])),
-                str(album.get('likes', [])),
-                album['timestamp'],
-                album.get('created_at', album['timestamp'])
-            ))
-        
-        # Import concerts
-        for concert in data.get('concerts', []):
-            c.execute('''
-            INSERT INTO concerts (id, username, bands, date, venue, city, 
-                                tags, info, likes, timestamp, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                concert['id'],
-                concert['username'],
-                concert['bands'],
-                concert['date'],
-                concert['venue'],
-                concert['city'],
-                str(concert.get('tags', [])),
-                concert.get('info', ''),
-                str(concert.get('likes', [])),
-                concert['timestamp'],
-                concert.get('created_at', concert['timestamp'])
-            ))
-        
-        conn.commit()
-        conn.close()
-        return True, f"Successfully imported {len(data.get('albums', []))} albums and {len(data.get('concerts', []))} concerts"
-    except Exception as e:
-        return False, f"Error importing database: {e}"
-
-def backup_database():
-    """Create a backup of the database file"""
-    try:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_filename = f"metal_music_backup_{timestamp}.db"
-        
-        # Copy the database file
-        shutil.copy2(DB_PATH, backup_filename)
-        
-        # Also create a backup directory for organization
-        if not os.path.exists("backups"):
-            os.makedirs("backups")
-        shutil.copy2(DB_PATH, f"backups/{backup_filename}")
-        
-        return backup_filename
-    except Exception as e:
-        st.error(f"Error creating backup: {e}")
-        return None
-
-def restore_database_from_file(uploaded_file):
-    """Restore database from uploaded .db file"""
-    try:
-        # Create a backup before restoring
-        backup_filename = backup_database()
-        
-        # Write uploaded file to database location
-        with open(DB_PATH, 'wb') as f:
-            f.write(uploaded_file.getbuffer())
-        
-        # Verify the restored database
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        
-        # Check if tables exist
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('albums', 'concerts')")
-        tables = c.fetchall()
-        
-        conn.close()
-        
-        if len(tables) == 2:
-            return True, f"Database restored successfully. Backup saved as {backup_filename}"
-        else:
-            # Restore from backup if tables don't exist
-            if backup_filename and os.path.exists(backup_filename):
-                shutil.copy2(backup_filename, DB_PATH)
-            return False, "Invalid database file. Backup restored."
-    except Exception as e:
-        return False, f"Error restoring database: {e}"
-
-def get_database_stats():
-    """Get database statistics"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        
-        # Count albums
-        c.execute('SELECT COUNT(*) FROM albums')
-        album_count = c.fetchone()[0]
-        
-        # Count concerts
-        c.execute('SELECT COUNT(*) FROM concerts')
-        concert_count = c.fetchone()[0]
-        
-        # Get latest entries
-        c.execute('SELECT MAX(timestamp) FROM albums')
-        latest_album = c.fetchone()[0]
-        
-        c.execute('SELECT MAX(timestamp) FROM concerts')
-        latest_concert = c.fetchone()[0]
-        
-        # Get database size
-        db_size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
-        
-        conn.close()
-        
-        return {
-            'album_count': album_count,
-            'concert_count': concert_count,
-            'latest_album': latest_album,
-            'latest_concert': latest_concert,
-            'db_size_mb': db_size / (1024 * 1024)
-        }
-    except Exception as e:
-        return None
 
 # ===========================
 # UNIVERSAL METADATA EXTRACTOR
@@ -887,158 +706,6 @@ def handle_album_submission(url, tags_input, is_manual=False, artist="", album_n
             return False
 
 # ===========================
-# ADMIN BACKUP/RESTORE PAGE
-# ===========================
-
-def admin_backup_page():
-    """Admin database backup and restore page"""
-    st.subheader("🔧 Admin Tools - Database Management")
-    
-    # Show database statistics
-    stats = get_database_stats()
-    if stats:
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("📊 Albums", stats['album_count'])
-        with col2:
-            st.metric("🎸 Concerts", stats['concert_count'])
-        with col3:
-            st.metric("🗄️ DB Size", f"{stats['db_size_mb']:.2f} MB")
-        with col4:
-            st.metric("🔄 Last Backup", "Click to create")
-    
-    st.markdown("---")
-    
-    # Create two columns for Export and Import
-    col_export, col_import = st.columns(2)
-    
-    with col_export:
-        st.markdown("### 📤 Export Database")
-        st.markdown("<div class='admin-tools'>", unsafe_allow_html=True)
-        
-        # Export to JSON
-        st.write("**Export to JSON**")
-        st.write("Export all data as a JSON file for backup or migration.")
-        
-        if st.button("📄 Export to JSON", key="export_json", use_container_width=True):
-            json_data = export_database_to_json()
-            if json_data:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"metalwall_backup_{timestamp}.json"
-                
-                st.download_button(
-                    label="⬇️ Download JSON File",
-                    data=json_data,
-                    file_name=filename,
-                    mime="application/json",
-                    use_container_width=True
-                )
-                st.success("✅ JSON export ready for download")
-            else:
-                st.error("❌ Failed to export database")
-        
-        st.divider()
-        
-        # Export to SQLite DB
-        st.write("**Export Database File**")
-        st.write("Download the complete SQLite database file.")
-        
-        if st.button("🗃️ Export Database File", key="export_db", use_container_width=True):
-            if os.path.exists(DB_PATH):
-                with open(DB_PATH, "rb") as f:
-                    db_data = f.read()
-                
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"metal_music_backup_{timestamp}.db"
-                
-                st.download_button(
-                    label="⬇️ Download Database File",
-                    data=db_data,
-                    file_name=filename,
-                    mime="application/x-sqlite3",
-                    use_container_width=True
-                )
-                st.success("✅ Database file ready for download")
-            else:
-                st.error("❌ Database file not found")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    with col_import:
-        st.markdown("### 📥 Import Database")
-        st.markdown("<div class='admin-tools'>", unsafe_allow_html=True)
-        
-        # Import from JSON
-        st.write("**Import from JSON**")
-        st.write("Import data from a JSON backup file.")
-        st.warning("⚠️ This will replace all existing data!")
-        
-        json_file = st.file_uploader("Choose JSON file", type=['json'], key="json_upload")
-        
-        if json_file is not None:
-            if st.button("🔄 Import from JSON", key="import_json", use_container_width=True):
-                try:
-                    json_data = json_file.getvalue().decode('utf-8')
-                    success, message = import_database_from_json(json_data)
-                    if success:
-                        st.success(f"✅ {message}")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {message}")
-                except Exception as e:
-                    st.error(f"❌ Error reading JSON file: {e}")
-        
-        st.divider()
-        
-        # Import from SQLite DB
-        st.write("**Import Database File**")
-        st.write("Upload and replace the entire database file.")
-        st.warning("⚠️ This will completely replace the current database!")
-        
-        db_file = st.file_uploader("Choose SQLite database file", type=['db', 'sqlite', 'sqlite3'], key="db_upload")
-        
-        if db_file is not None:
-            if st.button("🔄 Import Database File", key="import_db", use_container_width=True):
-                with st.spinner("Restoring database..."):
-                    success, message = restore_database_from_file(db_file)
-                    if success:
-                        st.success(f"✅ {message}")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {message}")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Quick Backup Section
-    st.markdown("---")
-    st.markdown("### ⚡ Quick Actions")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("💾 Create Quick Backup", key="quick_backup", use_container_width=True):
-            backup_filename = backup_database()
-            if backup_filename:
-                st.success(f"✅ Backup created: {backup_filename}")
-            else:
-                st.error("❌ Failed to create backup")
-    
-    with col2:
-        if st.button("🔍 Verify Database", key="verify_db", use_container_width=True):
-            stats = get_database_stats()
-            if stats:
-                st.info(f"""
-                **Database Status:**
-                - Albums: {stats['album_count']}
-                - Concerts: {stats['concert_count']}
-                - Size: {stats['db_size_mb']:.2f} MB
-                - Latest album: {stats['latest_album'][:19] if stats['latest_album'] else 'N/A'}
-                - Latest concert: {stats['latest_concert'][:19] if stats['latest_concert'] else 'N/A'}
-                """)
-            else:
-                st.error("❌ Could not verify database")
-
-# ===========================
 # MAIN PAGE
 # ===========================
 
@@ -1104,26 +771,18 @@ def main():
                         st.error("❌ Invalid credentials")
         else:
             st.success(f"✅ Connected as @{st.session_state.current_user}")
-            if st.session_state.current_user == "Admin":
-                st.info("🔧 Admin privileges enabled")
         
         st.divider()
         
         # ============ Navigation ============
-        # Admin gets extra navigation option
-        if st.session_state.current_user == "Admin":
-            nav_options = ["💿 Records", "🎵 New Post", "🎸 Gigs", "🏆 Ranking", "👤 Profile", "🔧 Admin Tools"]
-        else:
-            nav_options = ["💿 Records", "🎵 New Post", "🎸 Gigs", "🏆 Ranking", "👤 Profile"]
-        
         page = st.sidebar.radio(
             "📱 Navigation",
-            nav_options,
+            ["💿 Records", "🎵 New Post", "🎸 Gigs", "🏆 Ranking", "👤 Profile"],
             label_visibility="collapsed"
         )
         
         st.sidebar.divider()
-        st.sidebar.markdown("\\m/ MetalWall v0.3")
+        st.sidebar.markdown("\\m/ MetalWall v0.2")
         if st.session_state.current_user:
             st.sidebar.caption("Session persistence enabled")
     
@@ -1357,15 +1016,6 @@ def main():
             
             if not my_albums and not my_concerts and not liked_albums and not liked_concerts:
                 st.info("📭 You haven't shared or liked anything yet")
-    
-    # ============ PAGE: ADMIN TOOLS ============
-    elif page == "🔧 Admin Tools":
-        if st.session_state.current_user == "Admin":
-            admin_backup_page()
-        else:
-            st.error("⛔ Access Denied")
-            st.warning("Only Admin users can access this section.")
-            st.info("Please login with Admin credentials to access database tools.")
 
 # ===========================
 # RUN APP

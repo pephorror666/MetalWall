@@ -40,7 +40,7 @@ st.markdown("""
     }
     .tag-button {
         margin-right: 5px;
-        margin-bottom: 5px;
+        margin-bottom: 2px;
     }
     /* Success notification styling */
     .stSuccess {
@@ -572,7 +572,7 @@ def display_album_post(album):
                 tag_cols = st.columns(len(tags))
                 for idx, tag in enumerate(tags):
                     with tag_cols[idx]:
-                        if st.button(f"🔍 {tag}", key=f"feed_tag_{album['id']}_{tag}", 
+                        if st.button(f"#{tag}", key=f"feed_tag_{album['id']}_{tag}", 
                                     help=f"Filter by {tag}", use_container_width=True):
                             st.session_state.active_filter_feed = tag
                             st.rerun()

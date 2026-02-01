@@ -708,65 +708,11 @@ def show_success_message(message):
     st.success(message)
 
 # ===========================
-# NEW FEATURES
-# ===========================
-
-# 1. Add duplicate URL check function
-def check_duplicate_url(url):
-    """Check if URL already exists in database to avoid duplicates"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('SELECT COUNT(*) FROM albums WHERE url = ?', (url,))
-        count = c.fetchone()[0]
-        conn.close()
-        return count > 0
-    except Exception as e:
-        st.error(f"Error checking duplicate: {e}")
-        return False
-
-# 2. Update album function
-def update_album(album_id, url, artist, album_name, cover_url, platform, tags):
-    """Update an existing album"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('''
-        UPDATE albums 
-        SET url = ?, artist = ?, album_name = ?, cover_url = ?, platform = ?, tags = ?
-        WHERE id = ?
-        ''', (url, artist, album_name, cover_url, platform, str(tags), album_id))
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        st.error(f"Error updating album: {e}")
-        return False
-
-# 3. Update concert function
-def update_concert(concert_id, bands, date, venue, city, tags, info):
-    """Update an existing concert"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('''
-        UPDATE concerts 
-        SET bands = ?, date = ?, venue = ?, city = ?, tags = ?, info = ?
-        WHERE id = ?
-        ''', (bands, date, venue, city, str(tags), info, concert_id))
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        st.error(f"Error updating concert: {e}")
-        return False
-
-# ===========================
 # UI COMPONENTS
 # ===========================
 
 def display_album_post(album):
-    """Display an album post like Twitter/Mastodon with edit functionality"""
+    """Display an album post like Twitter/Mastodon"""
     cover_url = album.get('cover_url', '')
     username = album.get('username', 'Unknown')
     url = album.get('url', '#')
@@ -776,55 +722,6 @@ def display_album_post(album):
     timestamp = album.get('timestamp', '')
     tags = album.get('tags', [])
     
-    # Check if current user can edit this post
-    can_edit = (st.session_state.current_user == "Admin" or 
-                st.session_state.current_user == username)
-    
-    # Check if we're in edit mode for this album
-    is_editing = st.session_state.get(f'editing_album_{album["id"]}', False)
-    
-    # If editing mode is active, show edit form
-    if is_editing and can_edit:
-        with st.container():
-            st.markdown("### ✏️ Edit Album")
-            with st.form(f"edit_album_form_{album['id']}"):
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    new_artist = st.text_input("Artist", value=artist, key=f"edit_artist_{album['id']}")
-                    new_album_name = st.text_input("Album Name", value=album_name, key=f"edit_album_name_{album['id']}")
-                    new_url = st.text_input("Album URL", value=url, key=f"edit_url_{album['id']}")
-                
-                with col2:
-                    new_cover_url = st.text_input("Cover URL", value=cover_url if cover_url else "", 
-                                                 key=f"edit_cover_{album['id']}")
-                    new_platform = st.text_input("Platform", value=platform, key=f"edit_platform_{album['id']}")
-                    tags_str = " ".join([f"#{tag}" for tag in tags])
-                    new_tags_input = st.text_input("Tags", value=tags_str, 
-                                                  placeholder="#tag1 #tag2 #tag3",
-                                                  key=f"edit_tags_{album['id']}")
-                
-                col_save, col_cancel = st.columns(2)
-                with col_save:
-                    if st.form_submit_button("💾 Save Changes", use_container_width=True):
-                        new_tags = process_tags(new_tags_input)
-                        if update_album(album['id'], new_url, new_artist, new_album_name, 
-                                       new_cover_url, new_platform, new_tags):
-                            st.session_state[f'editing_album_{album["id"]}'] = False
-                            show_success_message("✅ Album updated successfully!")
-                            st.rerun()
-                        else:
-                            st.error("❌ Error updating album")
-                
-                with col_cancel:
-                    if st.form_submit_button("❌ Cancel", use_container_width=True):
-                        st.session_state[f'editing_album_{album["id"]}'] = False
-                        st.rerun()
-            
-            st.divider()
-            return  # Skip normal display when editing
-    
-    # Normal display (when not editing)
     if cover_url:
         cover_html = f'<a href="{url}" target="_blank" style="text-decoration: none;"><img src="{cover_url}" class="clickable-image" style="width:100%; border-radius:8px; object-fit:cover; height:180px;"></a>'
     else:
@@ -842,12 +739,12 @@ def display_album_post(album):
         st.markdown(f'{album_name}', unsafe_allow_html=True)
         st.caption(f'📱 {platform} • {get_time_ago(timestamp)} • @{username}')
     
-    # Create a container for the bottom row with tags, like, edit, and delete
+    # Create a container for the bottom row with tags, like, and delete
     bottom_container = st.container()
     
     with bottom_container:
         # Create columns for the bottom row
-        col_tags, col_actions = st.columns([3, 1])
+        col_tags, col_like_delete = st.columns([3, 1])
         
         with col_tags:
             # Only show tag buttons, not the text tags
@@ -861,62 +758,32 @@ def display_album_post(album):
                             st.session_state.active_filter_feed = tag
                             st.rerun()
         
-        with col_actions:
-            # Create sub-columns for actions within this column
-            if can_edit:
-                # Show both edit and delete for users who can edit
-                edit_col, like_col, delete_col = st.columns([1, 2, 1])
-                
-                with edit_col:
-                    if st.button("✏️", key=f"edit_{album['id']}", 
-                               help="Edit", use_container_width=True):
-                        st.session_state[f'editing_album_{album["id"]}'] = True
-                        st.rerun()
-                
-                with like_col:
+        with col_like_delete:
+            # Create sub-columns for like and delete within this column
+            like_col, delete_col = st.columns([2, 1])
+            
+            with like_col:
+                # Only show like button if user is logged in
+                if st.session_state.current_user:
                     # Like button with count displayed next to it
-                    if st.session_state.current_user:
-                        like_text = f"{'❤️' if is_liked else '🤍'} {current_likes}"
-                        if st.button(like_text, key=f"like_{album['id']}", 
-                                   help="Like", use_container_width=True):
-                            if is_liked:
-                                likes.remove(st.session_state.current_user)
-                            else:
-                                likes.append(st.session_state.current_user)
-                            update_album_likes(album['id'], likes)
-                            st.rerun()
-                    else:
-                        # For guest, just show the likes count
-                        st.markdown(f"❤️ {current_likes}")
-                
-                with delete_col:
-                    if st.button("🗑️", key=f"delete_{album['id']}", 
-                               help="Delete", use_container_width=True):
-                        delete_album(album['id'])
-                        show_success_message("✅ Album deleted successfully!")
+                    like_text = f"{'❤️' if is_liked else '🤍'} {current_likes}"
+                    if st.button(like_text, key=f"like_{album['id']}", 
+                               help="Like", use_container_width=True):
+                        if is_liked:
+                            likes.remove(st.session_state.current_user)
+                        else:
+                            likes.append(st.session_state.current_user)
+                        update_album_likes(album['id'], likes)
                         st.rerun()
-            else:
-                # For users who cannot edit, show like and delete (for admin only)
-                like_col, delete_col = st.columns([2, 1])
-                
-                with like_col:
-                    if st.session_state.current_user:
-                        like_text = f"{'❤️' if is_liked else '🤍'} {current_likes}"
-                        if st.button(like_text, key=f"like_{album['id']}", 
-                                   help="Like", use_container_width=True):
-                            if is_liked:
-                                likes.remove(st.session_state.current_user)
-                            else:
-                                likes.append(st.session_state.current_user)
-                            update_album_likes(album['id'], likes)
-                            st.rerun()
-                    else:
-                        # For guest, just show the likes count
-                        st.markdown(f"❤️ {current_likes}")
-                
-                with delete_col:
-                    # Admin can delete any post
-                    if st.session_state.current_user == "Admin":
+                else:
+                    # For guest, just show the likes count
+                    st.markdown(f"❤️ {current_likes}")
+            
+            with delete_col:
+                # Show delete button only for logged in users
+                if st.session_state.current_user:
+                    # Admin can delete any post, users can delete their own posts
+                    if st.session_state.current_user == "Admin" or st.session_state.current_user == username:
                         if st.button("🗑️", key=f"delete_{album['id']}", 
                                    help="Delete", use_container_width=True):
                             delete_album(album['id'])
@@ -925,9 +792,8 @@ def display_album_post(album):
     
     st.divider()
 
-
 def display_concert_post(concert):
-    """Display a concert post with edit functionality"""
+    """Display a concert post"""
     bands = concert.get('bands', 'Unknown')
     date = concert.get('date', '')
     venue = concert.get('venue', 'Unknown')
@@ -936,57 +802,6 @@ def display_concert_post(concert):
     username = concert.get('username', 'Unknown')
     timestamp = concert.get('timestamp', '')
     
-    # Check if current user can edit this concert
-    can_edit = (st.session_state.current_user == "Admin" or 
-                st.session_state.current_user == username)
-    
-    # Check if we're in edit mode for this concert
-    is_editing = st.session_state.get(f'editing_concert_{concert["id"]}', False)
-    
-    # If editing mode is active, show edit form
-    if is_editing and can_edit:
-        with st.container():
-            st.markdown("### ✏️ Edit Concert")
-            with st.form(f"edit_concert_form_{concert['id']}"):
-                new_bands = st.text_input("Bands", value=bands, 
-                                         key=f"edit_bands_{concert['id']}")
-                new_date = st.date_input("Date", value=datetime.strptime(date, '%Y-%m-%d').date(), 
-                                        key=f"edit_date_{concert['id']}")
-                new_venue = st.text_input("Venue", value=venue, 
-                                         key=f"edit_venue_{concert['id']}")
-                new_city = st.text_input("City", value=city, 
-                                        key=f"edit_city_{concert['id']}")
-                
-                current_tags = concert.get('tags', [])
-                tags_str = " ".join([f"#{tag}" for tag in current_tags])
-                new_tags_input = st.text_input("Tags", value=tags_str, 
-                                              placeholder="#tag1 #tag2 #tag3",
-                                              key=f"edit_tags_concert_{concert['id']}")
-                
-                new_info = st.text_area("Additional info", value=info, 
-                                       key=f"edit_info_{concert['id']}")
-                
-                col_save, col_cancel = st.columns(2)
-                with col_save:
-                    if st.form_submit_button("💾 Save Changes", use_container_width=True):
-                        new_tags = process_tags(new_tags_input)
-                        if update_concert(concert['id'], new_bands, new_date, new_venue, 
-                                        new_city, new_tags, new_info):
-                            st.session_state[f'editing_concert_{concert["id"]}'] = False
-                            show_success_message("✅ Concert updated successfully!")
-                            st.rerun()
-                        else:
-                            st.error("❌ Error updating concert")
-                
-                with col_cancel:
-                    if st.form_submit_button("❌ Cancel", use_container_width=True):
-                        st.session_state[f'editing_concert_{concert["id"]}'] = False
-                        st.rerun()
-            
-            st.divider()
-            return  # Skip normal display when editing
-    
-    # Normal display (when not editing)
     days_until = get_days_until(date)
     date_display = format_date_display(date)
     
@@ -1007,34 +822,14 @@ def display_concert_post(concert):
     
     st.caption(f'{get_time_ago(timestamp)} • @{username}')
     
-    # Action buttons container
-    col_actions = st.columns([1, 1])[0]  # Single column for actions
-    
-    with col_actions:
-        if can_edit:
-            # Show edit and delete buttons
-            edit_col, delete_col = st.columns(2)
-            
-            with edit_col:
-                if st.button("✏️ Edit", key=f"edit_concert_{concert['id']}", 
-                           help="Edit concert", use_container_width=True):
-                    st.session_state[f'editing_concert_{concert["id"]}'] = True
-                    st.rerun()
-            
-            with delete_col:
-                if st.button("🗑️ Delete", key=f"delete_concert_{concert['id']}", 
-                           help="Delete concert", use_container_width=True):
-                    delete_concert(concert['id'])
-                    show_success_message("✅ Concert deleted successfully!")
-                    st.rerun()
-        else:
-            # Admin can delete any concert
-            if st.session_state.current_user == "Admin":
-                if st.button("🗑️ Delete", key=f"delete_concert_{concert['id']}", 
-                           help="Delete concert", use_container_width=True):
-                    delete_concert(concert['id'])
-                    show_success_message("✅ Concert deleted successfully!")
-                    st.rerun()
+    # Show delete button only for logged in users
+    if st.session_state.current_user:
+        # Admin can delete any post, users can delete their own posts
+        if st.session_state.current_user == "Admin" or st.session_state.current_user == concert['username']:
+            if st.button("🗑️", key=f"delete_concert_{concert['id']}", help="Delete"):
+                delete_concert(concert['id'])
+                show_success_message("✅ Concert deleted successfully!")
+                st.rerun()
     
     st.divider()
 
@@ -1043,12 +838,7 @@ def display_concert_post(concert):
 # ===========================
 
 def handle_album_submission(url, tags_input, is_manual=False, artist="", album_name="", cover_url=""):
-    """Handle album form submission with duplicate check"""
-    # Check for duplicate URL
-    if check_duplicate_url(url):
-        st.error("❌ This URL has already been posted. Please share a different album.")
-        return False
-    
+    """Handle album form submission"""
     if is_manual:
         if artist and album_name and url:
             tags = process_tags(tags_input)
@@ -1528,21 +1318,20 @@ def main():
             my_albums = [a for a in albums if a['username'] == st.session_state.current_user]
             my_concerts = [c for c in concerts if c['username'] == st.session_state.current_user]
             
-            # Get liked albums
+            # Get liked albums and concerts
             liked_albums = [a for a in albums if st.session_state.current_user in a.get('likes', [])]
+            liked_concerts = [c for c in concerts if st.session_state.current_user in c.get('likes', [])]
             
-            # REMOVED: liked_concerts counter
-            # liked_concerts = [c for c in concerts if st.session_state.current_user in c.get('likes', [])]
-            
-            # Show counts - MODIFIED: Only show 3 metrics now
-            col1, col2, col3 = st.columns(3)  # Changed from 4 to 3 columns
+            # Show counts
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("🎵 My Albums", len(my_albums))
             with col2:
                 st.metric("🎸 My Gigs", len(my_concerts))
             with col3:
                 st.metric("❤️ Liked Albums", len(liked_albums))
-            # REMOVED: "Liked Gigs" counter
+            with col4:
+                st.metric("🤘 Liked Gigs", len(liked_concerts))
             
             st.divider()
             
@@ -1561,13 +1350,12 @@ def main():
                 for concert in my_concerts:
                     display_concert_post(concert)
             
-            # REMOVED: "Liked Gigs" section
-            # if liked_concerts:
-            #     st.write("### 🤘 Liked Gigs")
-            #     for concert in liked_concerts:
-            #         display_concert_post(concert)
+            if liked_concerts:
+                st.write("### 🤘 Liked Gigs")
+                for concert in liked_concerts:
+                    display_concert_post(concert)
             
-            if not my_albums and not my_concerts and not liked_albums:  # Removed: and not liked_concerts
+            if not my_albums and not my_concerts and not liked_albums and not liked_concerts:
                 st.info("📭 You haven't shared or liked anything yet")
     
     # ============ PAGE: ADMIN TOOLS ============

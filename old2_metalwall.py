@@ -372,8 +372,6 @@ if 'active_filter_ranking' not in st.session_state:
     st.session_state.active_filter_ranking = None
 if 'active_filter_concerts' not in st.session_state:
     st.session_state.active_filter_concerts = None
-if 'show_manual_input' not in st.session_state:
-    st.session_state.show_manual_input = False
 
 init_db()
 
@@ -624,82 +622,36 @@ def main():
     # ============ PAGE: NEW POST ============
     elif page == "🎵 New Post":
         st.subheader("🎵 New Post")
+        st.write("Paste a URL of your favorite album")
         
-        # Create two columns for the two input methods
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("### Automatic (from URL)")
-            st.write("Paste a URL of your favorite album")
+        with st.form("album_form"):
+            url = st.text_input("Album URL", placeholder="https://open.spotify.com/album/...")
+            tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags")
+            submitted = st.form_submit_button("🚀 Share", use_container_width=True)
             
-            with st.form("album_form_auto"):
-                url = st.text_input("Album URL", placeholder="https://open.spotify.com/album/...", key="auto_url")
-                tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags", key="auto_tags")
-                submitted_auto = st.form_submit_button("🚀 Share from URL", use_container_width=True)
-                
-                if submitted_auto:
-                    if url:
-                        with st.spinner("⏳ Extracting metadata..."):
-                            metadata = extract_og_metadata(url)
-                            if metadata:
-                                tags = process_tags(tags_input)
-                                if save_album(
-                                    st.session_state.current_user,
-                                    url,
-                                    metadata['artist'],
-                                    metadata['album_name'],
-                                    metadata['cover_url'],
-                                    metadata['platform'],
-                                    tags
-                                ):
-                                    st.success("✅ Album shared!")
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Error saving")
+            if submitted:
+                if url:
+                    with st.spinner("⏳ Extracting metadata..."):
+                        metadata = extract_og_metadata(url)
+                        if metadata:
+                            tags = process_tags(tags_input)
+                            if save_album(
+                                st.session_state.current_user,
+                                url,
+                                metadata['artist'],
+                                metadata['album_name'],
+                                metadata['cover_url'],
+                                metadata['platform'],
+                                tags
+                            ):
+                                st.success("✅ Album shared!")
+                                st.rerun()
                             else:
-                                st.error("❌ Could not extract metadata. Verify the URL or use Manual Input")
-                    else:
-                        st.warning("⚠️ Please paste a valid URL")
-        
-        with col2:
-            st.write("### Manual Input")
-            st.write("For platforms without automatic metadata")
-            
-            with st.form("album_form_manual"):
-                artist = st.text_input("Artist", placeholder="Artist name", key="manual_artist")
-                album_name = st.text_input("Album Name", placeholder="Album title", key="manual_album")
-                url = st.text_input("Album URL (optional)", placeholder="https://...", key="manual_url")
-                cover_url = st.text_input("Cover URL (optional)", placeholder="https://...", key="manual_cover")
-                platform = st.selectbox(
-                    "Platform",
-                    ["Spotify", "Bandcamp", "YouTube", "SoundCloud", "Apple Music", "Tidal", "Deezer", "Other"],
-                    key="manual_platform"
-                )
-                tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags", key="manual_tags")
-                submitted_manual = st.form_submit_button("📝 Share Manually", use_container_width=True)
-                
-                if submitted_manual:
-                    if artist and album_name:
-                        # If no URL provided, use a placeholder
-                        if not url:
-                            url = "#"
-                        
-                        tags = process_tags(tags_input)
-                        if save_album(
-                            st.session_state.current_user,
-                            url,
-                            artist,
-                            album_name,
-                            cover_url,
-                            platform,
-                            tags
-                        ):
-                            st.success("✅ Album shared!")
-                            st.rerun()
+                                st.error("❌ Error saving")
                         else:
-                            st.error("❌ Error saving")
-                    else:
-                        st.warning("⚠️ Artist and Album Name are required")
+                            st.error("❌ Could not extract metadata. Verify the URL")
+                else:
+                    st.warning("⚠️ Please paste a valid URL")
     
     # ============ PAGE: CONCERTS ============
     elif page == "🎸 Concerts":

@@ -1,9 +1,9 @@
 # ===========================
 # METAL MUSIC SOCIAL - STREAMLIT APP v3.3
 # ===========================
-# NEW: Universal Metadata Extractor (Open Graph)
-# Works with: Spotify, Bandcamp, Tidal, Apple Music, YouTube, SoundCloud, etc.
-# Like when you paste a link in WhatsApp - works ALWAYS
+# NUEVO: Extractor Universal de Metadata (Open Graph)
+# Funciona con: Spotify, Bandcamp, Tidal, Apple Music, YouTube, SoundCloud, etc.
+# Como cuando pegas un enlace en WhatsApp - funciona SIEMPRE
 
 import streamlit as st
 import sqlite3
@@ -14,7 +14,7 @@ import json
 import re
 
 # ===========================
-# STREAMLIT CONFIGURATION
+# CONFIGURACIÓN DE STREAMLIT
 # ===========================
 
 st.set_page_config(
@@ -24,7 +24,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Elegant dark theme
+# Tema oscuro elegante
 st.markdown("""
 <style>
     body {
@@ -42,13 +42,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ===========================
-# DATABASE - SQLITE
+# BASE DE DATOS - SQLITE
 # ===========================
 
 DB_PATH = "metal_music.db"
 
 def init_db():
-    """Initialize database"""
+    """Inicializa la base de datos"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
@@ -92,7 +92,7 @@ def init_db():
     conn.close()
 
 def load_albums():
-    """Load all albums"""
+    """Carga todos los álbumes"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -116,11 +116,11 @@ def load_albums():
             })
         return albums
     except Exception as e:
-        st.error(f"Error loading albums: {e}")
+        st.error(f"Error cargando álbumes: {e}")
         return []
 
 def load_concerts():
-    """Load all concerts"""
+    """Carga todos los conciertos"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -144,11 +144,11 @@ def load_concerts():
             })
         return concerts
     except Exception as e:
-        st.error(f"Error loading concerts: {e}")
+        st.error(f"Error cargando conciertos: {e}")
         return []
 
 def save_album(username, url, artist, album_name, cover_url, platform, tags):
-    """Save a new album"""
+    """Guarda un nuevo álbum"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -160,11 +160,11 @@ def save_album(username, url, artist, album_name, cover_url, platform, tags):
         conn.close()
         return True
     except Exception as e:
-        st.error(f"Error saving album: {e}")
+        st.error(f"Error guardando álbum: {e}")
         return False
 
 def save_concert(username, bands, date, venue, city, tags, info):
-    """Save a new concert"""
+    """Guarda un nuevo concierto"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -176,11 +176,11 @@ def save_concert(username, bands, date, venue, city, tags, info):
         conn.close()
         return True
     except Exception as e:
-        st.error(f"Error saving concert: {e}")
+        st.error(f"Error guardando concierto: {e}")
         return False
 
 def update_album_likes(album_id, likes_list):
-    """Update likes"""
+    """Actualiza likes"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -189,11 +189,11 @@ def update_album_likes(album_id, likes_list):
         conn.close()
         return True
     except Exception as e:
-        st.error(f"Error updating likes: {e}")
+        st.error(f"Error actualizando likes: {e}")
         return False
 
 def update_concert_likes(concert_id, likes_list):
-    """Update concert likes"""
+    """Actualiza likes de conciertos"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -202,11 +202,11 @@ def update_concert_likes(concert_id, likes_list):
         conn.close()
         return True
     except Exception as e:
-        st.error(f"Error updating likes: {e}")
+        st.error(f"Error actualizando likes: {e}")
         return False
 
 def delete_album(album_id):
-    """Delete an album"""
+    """Elimina un álbum"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -215,11 +215,11 @@ def delete_album(album_id):
         conn.close()
         return True
     except Exception as e:
-        st.error(f"Error deleting album: {e}")
+        st.error(f"Error eliminando álbum: {e}")
         return False
 
 def delete_concert(concert_id):
-    """Delete a concert"""
+    """Elimina un concierto"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -228,11 +228,11 @@ def delete_concert(concert_id):
         conn.close()
         return True
     except Exception as e:
-        st.error(f"Error deleting concert: {e}")
+        st.error(f"Error eliminando concierto: {e}")
         return False
 
 def delete_past_concerts():
-    """Delete past concerts"""
+    """Elimina conciertos pasados"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -241,14 +241,14 @@ def delete_past_concerts():
         conn.commit()
         conn.close()
     except Exception as e:
-        st.error(f"Error cleaning concerts: {e}")
+        st.error(f"Error limpiando conciertos: {e}")
 
 # ===========================
-# UNIVERSAL METADATA EXTRACTOR
+# EXTRACTOR UNIVERSAL DE METADATA
 # ===========================
 
 def detect_platform(url):
-    """Detect platform based on domain"""
+    """Detecta la plataforma basada en el dominio"""
     platforms = {
         'spotify': 'Spotify',
         'bandcamp': 'Bandcamp',
@@ -269,7 +269,7 @@ def detect_platform(url):
     return 'Music Service'
 
 def extract_artist(metadata, platform):
-    """Extract artist name from title"""
+    """Extrae el nombre del artista del título"""
     title = metadata.get('og_title', '')
     description = metadata.get('og_description', '')
     
@@ -289,7 +289,7 @@ def extract_artist(metadata, platform):
     return 'Unknown Artist'
 
 def extract_album(metadata, platform):
-    """Extract album name"""
+    """Extrae el nombre del álbum"""
     title = metadata.get('og_title', '')
     
     if ' - ' in title:
@@ -303,9 +303,9 @@ def extract_album(metadata, platform):
 
 def extract_og_metadata(url):
     """
-    UNIVERSAL extractor using Open Graph metadata
-    Works with ANY platform (Spotify, Bandcamp, Tidal, Apple Music, etc.)
-    Similar to how WhatsApp/Discord/Twitter does it
+    Extractor UNIVERSAL usando Open Graph metadata
+    Funciona con CUALQUIER plataforma (Spotify, Bandcamp, Tidal, Apple Music, etc.)
+    Similar a cómo WhatsApp/Discord/Twitter lo hace
     """
     try:
         headers = {
@@ -320,7 +320,7 @@ def extract_og_metadata(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         metadata = {}
         
-        # Look for Open Graph meta tags
+        # Buscar Open Graph meta tags
         for meta in soup.find_all('meta', property=True):
             prop = meta.get('property', '')
             content = meta.get('content', '')
@@ -331,7 +331,7 @@ def extract_og_metadata(url):
             elif prop == 'og:image':
                 metadata['og_image'] = content
         
-        # Fallback: look for meta name
+        # Fallback: buscar meta name
         if not metadata.get('og_title'):
             for meta in soup.find_all('meta'):
                 name = meta.get('name', '')
@@ -357,7 +357,7 @@ def extract_og_metadata(url):
         return None
 
 # ===========================
-# INITIALIZE SESSION STATE
+# INICIALIZAR SESSION STATE
 # ===========================
 
 if 'current_user' not in st.session_state:
@@ -376,26 +376,26 @@ if 'active_filter_concerts' not in st.session_state:
 init_db()
 
 # ===========================
-# AUTHENTICATION FUNCTIONS
+# FUNCIONES DE AUTENTICACIÓN
 # ===========================
 
-def verify_credentials(username, password):
-    """Verify credentials"""
+def verificar_credenciales(usuario, password):
+    """Verifica credenciales"""
     try:
-        if username in st.secrets:
-            if st.secrets[username]["password"] == password:
-                return True, st.secrets[username].get("email", username)
+        if usuario in st.secrets:
+            if st.secrets[usuario]["password"] == password:
+                return True, st.secrets[usuario].get("correo", usuario)
         return False, None
     except Exception as e:
-        st.error(f"Authentication error: {e}")
+        st.error(f"Error en autenticación: {e}")
         return False, None
 
 # ===========================
-# UTILITY FUNCTIONS
+# FUNCIONES DE UTILIDAD
 # ===========================
 
 def get_time_ago(timestamp):
-    """Calculate relative time"""
+    """Calcula tiempo relativo"""
     now = datetime.now()
     diff = now - timestamp
     minutes = int(diff.total_seconds() / 60)
@@ -403,16 +403,16 @@ def get_time_ago(timestamp):
     days = int(diff.total_seconds() / 86400)
     
     if minutes < 1:
-        return "just now"
+        return "hace un momento"
     elif minutes < 60:
-        return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+        return f"hace {minutes} minuto{'s' if minutes > 1 else ''}"
     elif hours < 24:
-        return f"{hours} hour{'s' if hours > 1 else ''} ago"
+        return f"hace {hours} hora{'s' if hours > 1 else ''}"
     else:
-        return f"{days} day{'s' if days > 1 else ''} ago"
+        return f"hace {days} día{'s' if days > 1 else ''}"
 
 def format_date_display(date_str):
-    """Convert YYYY-MM-DD to DD/MM/YYYY"""
+    """Convierte YYYY-MM-DD a DD/MM/YYYY"""
     try:
         date_obj = datetime.strptime(date_str, '%Y-%m-%d')
         return date_obj.strftime('%d/%m/%Y')
@@ -420,7 +420,7 @@ def format_date_display(date_str):
         return date_str
 
 def get_days_until(date_str):
-    """Calculate days until concert"""
+    """Calcula días hasta concierto"""
     try:
         concert_date = datetime.strptime(date_str, '%Y-%m-%d')
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -430,7 +430,7 @@ def get_days_until(date_str):
         return 0
 
 def process_tags(tags_str):
-    """Process tags"""
+    """Procesa tags"""
     tags = []
     for tag in tags_str.split():
         tag = tag.strip()
@@ -442,11 +442,11 @@ def process_tags(tags_str):
     return tags[:5]
 
 # ===========================
-# UI COMPONENTS
+# COMPONENTES DE UI
 # ===========================
 
 def display_album_post(album):
-    """Display an album post like Twitter/Mastodon"""
+    """Muestra un post de álbum tipo Twitter/Mastodon"""
     cover_url = album.get('cover_url', '')
     username = album.get('username', 'Unknown')
     url = album.get('url', '#')
@@ -476,21 +476,21 @@ def display_album_post(album):
     col_tags, col_like, col_delete = st.columns([3, 0.5, 0.5])
     
     with col_tags:
-        # Show tags in one line
+        # Mostrar tags en una línea
         if tags:
             tags_html = ' '.join([f'#{tag}' for tag in tags])
             st.markdown(tags_html, unsafe_allow_html=True)
         
-        # Filter buttons in one line using horizontal container
+        # Botones de filtro en una línea usando contenedor horizontal
         tag_cols = st.columns(len(tags)) if tags else []
         for idx, tag in enumerate(tags):
             with tag_cols[idx]:
-                if st.button(f"🔍 {tag}", key=f"feed_tag_{album['id']}_{tag}", help=f"Filter by {tag}"):
+                if st.button(f"🔍 {tag}", key=f"feed_tag_{album['id']}_{tag}", help=f"Filtrar por {tag}"):
                     st.session_state.active_filter_feed = tag
                     st.rerun()
     
     with col_like:
-        if st.button("❤️" if is_liked else "🤍", key=f"like_{album['id']}", help="Like"):
+        if st.button("❤️" if is_liked else "🤍", key=f"like_{album['id']}", help="Me gusta"):
             if is_liked:
                 likes.remove(st.session_state.current_user)
             else:
@@ -501,14 +501,14 @@ def display_album_post(album):
     
     with col_delete:
         if st.session_state.current_user == username:
-            if st.button("🗑️", key=f"delete_{album['id']}", help="Delete"):
+            if st.button("🗑️", key=f"delete_{album['id']}", help="Eliminar"):
                 delete_album(album['id'])
                 st.rerun()
     
     st.divider()
 
 def display_concert_post(concert):
-    """Display a concert post without tags or like button"""
+    """Muestra un post de concierto sin tags ni botón de me gusta"""
     bands = concert.get('bands', 'Unknown')
     date = concert.get('date', '')
     venue = concert.get('venue', 'Unknown')
@@ -537,20 +537,20 @@ def display_concert_post(concert):
     
     st.caption(f'{get_time_ago(timestamp)} • @{username}')
     
-    # Only delete button, no tags or like
+    # Solo botón de eliminar, sin tags ni like
     if st.session_state.current_user == concert['username']:
-        if st.button("🗑️", key=f"delete_concert_{concert['id']}", help="Delete"):
+        if st.button("🗑️", key=f"delete_concert_{concert['id']}", help="Eliminar"):
             delete_concert(concert['id'])
             st.rerun()
     
     st.divider()
 
 # ===========================
-# MAIN PAGE
+# PÁGINA PRINCIPAL
 # ===========================
 
 def main():
-    """Main app function"""
+    """Función principal de la app"""
     
     # ============ Header ============
     col1, col2 = st.columns([0.8, 0.2])
@@ -558,55 +558,55 @@ def main():
         st.title("🤘 Metal Music Social")
     with col2:
         if st.session_state.current_user:
-            if st.button("🚪 Logout"):
+            if st.button("🚪 Salir"):
                 st.session_state.current_user = None
                 st.rerun()
     
-    # ============ Sidebar - Authentication ============
+    # ============ Sidebar - Autenticación ============
     with st.sidebar:
-        st.header("👤 User")
+        st.header("👤 Usuario")
         if not st.session_state.current_user:
-            st.subheader("Login")
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            if st.button("Login"):
-                ok, email = verify_credentials(username, password)
+            st.subheader("Acceso")
+            usuario = st.text_input("Usuario")
+            password = st.text_input("Contraseña", type="password")
+            if st.button("Entrar"):
+                ok, email = verificar_credenciales(usuario, password)
                 if ok:
-                    st.session_state.current_user = username
+                    st.session_state.current_user = usuario
                     st.rerun()
                 else:
-                    st.error("❌ Invalid credentials")
+                    st.error("❌ Credenciales incorrectas")
         else:
-            st.success(f"✅ Connected as @{st.session_state.current_user}")
+            st.success(f"✅ Conectado como @{st.session_state.current_user}")
         
         st.divider()
         
-        # ============ Navigation ============
+        # ============ Navegación ============
         page = st.sidebar.radio(
-            "📱 Navigation",
-            ["📜 Feed", "🎵 New Post", "🎸 Concerts", "🏆 Ranking", "👤 Profile"],
+            "📱 Navegación",
+            ["📜 Feed", "🎵 Nuevo Post", "🎸 Conciertos", "🏆 Ranking", "👤 Perfil"],
             label_visibility="collapsed"
         )
         
         st.sidebar.divider()
         st.sidebar.markdown("🤘 Metal Music Social v3.3")
     
-    # ============ ONLY IF AUTHENTICATED ============
+    # ============ SOLO SI ESTÁ AUTENTICADO ============
     if not st.session_state.current_user:
-        st.warning("⚠️ Please login first")
+        st.warning("⚠️ Por favor, accede primero")
         return
     
-    # ============ PAGE: FEED ============
+    # ============ PÁGINA: FEED ============
     if page == "📜 Feed":
-        st.subheader("📜 Global Feed")
+        st.subheader("📜 Feed Global")
         albums = load_albums()
         
         if st.session_state.active_filter_feed:
             col1, col2 = st.columns([3, 1])
             with col1:
-                st.info(f"🔍 Filtered by: **#{st.session_state.active_filter_feed}**")
+                st.info(f"🔍 Filtrado por: **#{st.session_state.active_filter_feed}**")
             with col2:
-                if st.button("✖️ Clear filter", key="clear_feed_filter"):
+                if st.button("✖️ Limpiar filtro", key="clear_feed_filter"):
                     st.session_state.active_filter_feed = None
                     st.rerun()
         
@@ -614,24 +614,24 @@ def main():
             albums = [a for a in albums if st.session_state.active_filter_feed.lower() in [t.lower() for t in a.get('tags', [])]]
         
         if not albums:
-            st.info("📭 No albums with this tag")
+            st.info("📭 No hay álbumes con este tag")
         else:
             for album in albums:
                 display_album_post(album)
     
-    # ============ PAGE: NEW POST ============
-    elif page == "🎵 New Post":
-        st.subheader("🎵 New Post")
-        st.write("Paste a URL of your favorite album")
+    # ============ PÁGINA: NUEVO POST ============
+    elif page == "🎵 Nuevo Post":
+        st.subheader("🎵 Nuevo Post")
+        st.write("Pega una URL de tu álbum favorito")
         
         with st.form("album_form"):
-            url = st.text_input("Album URL", placeholder="https://open.spotify.com/album/...")
-            tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags")
-            submitted = st.form_submit_button("🚀 Share", use_container_width=True)
+            url = st.text_input("URL del álbum", placeholder="https://open.spotify.com/album/...")
+            tags_input = st.text_input("Tags", placeholder="Ej: #deathmetal #classicmetal", help="Máximo 5 tags")
+            submitted = st.form_submit_button("🚀 Compartir", use_container_width=True)
             
             if submitted:
                 if url:
-                    with st.spinner("⏳ Extracting metadata..."):
+                    with st.spinner("⏳ Extrayendo metadata..."):
                         metadata = extract_og_metadata(url)
                         if metadata:
                             tags = process_tags(tags_input)
@@ -644,70 +644,70 @@ def main():
                                 metadata['platform'],
                                 tags
                             ):
-                                st.success("✅ Album shared!")
+                                st.success("✅ ¡Álbum compartido!")
                                 st.rerun()
                             else:
-                                st.error("❌ Error saving")
+                                st.error("❌ Error al guardar")
                         else:
-                            st.error("❌ Could not extract metadata. Verify the URL")
+                            st.error("❌ No se pudo extraer la metadata. Verifica la URL")
                 else:
-                    st.warning("⚠️ Please paste a valid URL")
+                    st.warning("⚠️ Pega una URL válida")
     
-    # ============ PAGE: CONCERTS ============
-    elif page == "🎸 Concerts":
-        st.subheader("🎸 Concerts")
+    # ============ PÁGINA: CONCIERTOS ============
+    elif page == "🎸 Conciertos":
+        st.subheader("🎸 Conciertos")
         delete_past_concerts()
         
         col1, col2 = st.columns([3, 1])
         with col1:
-            st.write("Upcoming metal events")
+            st.write("Próximos eventos de metal")
         with col2:
-            if st.button("➕ New Concert"):
+            if st.button("➕ Nuevo Concierto"):
                 st.session_state.show_concert_form = not st.session_state.show_concert_form
         
         if st.session_state.show_concert_form:
             with st.form("concert_form"):
-                bands = st.text_input("Bands", placeholder="Separate with commas")
-                date = st.date_input("Date")
-                venue = st.text_input("Venue")
-                city = st.text_input("City")
-                tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #liveshow")
-                info = st.text_area("Additional info", placeholder="Tickets, prices, etc.")
-                submitted = st.form_submit_button("✅ Save Concert", use_container_width=True)
+                bands = st.text_input("Bandas", placeholder="Separa con comas")
+                date = st.date_input("Fecha")
+                venue = st.text_input("Lugar")
+                city = st.text_input("Ciudad")
+                tags_input = st.text_input("Tags", placeholder="Ej: #deathmetal #liveshow")
+                info = st.text_area("Información adicional", placeholder="Entradas, precios, etc.")
+                submitted = st.form_submit_button("✅ Guardar Concierto", use_container_width=True)
                 
                 if submitted:
                     if bands and venue and city:
                         tags = process_tags(tags_input)
                         if save_concert(st.session_state.current_user, bands, date, venue, city, tags, info):
-                            st.success("✅ Concert added!")
+                            st.success("✅ ¡Concierto añadido!")
                             st.session_state.show_concert_form = False
                             st.rerun()
                         else:
-                            st.error("❌ Error saving")
+                            st.error("❌ Error al guardar")
                     else:
-                        st.warning("⚠️ Please complete all required fields")
+                        st.warning("⚠️ Completa todos los campos requeridos")
         
         st.divider()
         concerts = load_concerts()
         
         if not concerts:
-            st.info("📭 No upcoming concerts")
+            st.info("📭 No hay conciertos próximos")
         else:
             for concert in concerts:
                 display_concert_post(concert)
     
-    # ============ PAGE: RANKING ============
+    # ============ PÁGINA: RANKING ============
     elif page == "🏆 Ranking":
-        st.subheader("🏆 Album Ranking")
+        st.subheader("🏆 Ranking de Álbumes")
         albums = load_albums()
         albums_sorted = sorted(albums, key=lambda x: len(x.get('likes', [])), reverse=True)
         
         if st.session_state.active_filter_ranking:
             col1, col2 = st.columns([3, 1])
             with col1:
-                st.info(f"🔍 Filtered by: **#{st.session_state.active_filter_ranking}**")
+                st.info(f"🔍 Filtrado por: **#{st.session_state.active_filter_ranking}**")
             with col2:
-                if st.button("✖️ Clear filter", key="clear_ranking_filter"):
+                if st.button("✖️ Limpiar filtro", key="clear_ranking_filter"):
                     st.session_state.active_filter_ranking = None
                     st.rerun()
         
@@ -715,39 +715,46 @@ def main():
             albums_sorted = [a for a in albums_sorted if st.session_state.active_filter_ranking.lower() in [t.lower() for t in a.get('tags', [])]]
         
         if not albums_sorted:
-            st.info("📭 No albums with this tag")
+            st.info("📭 No hay álbumes con este tag")
         else:
             for idx, album in enumerate(albums_sorted, 1):
                 st.write(f"**#{idx}**")
                 display_album_post(album)
     
-    # ============ PAGE: PROFILE ============
-    elif page == "👤 Profile":
-        st.subheader("👤 My Profile")
+    # ============ PÁGINA: PERFIL ============
+    elif page == "👤 Perfil":
+        st.subheader("👤 Mi Perfil")
         albums = load_albums()
         concerts = load_concerts()
         my_albums = [a for a in albums if a['username'] == st.session_state.current_user]
         my_concerts = [c for c in concerts if c['username'] == st.session_state.current_user]
         
-        # Removed the user stats section (the three columns with metrics)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("📀 Álbumes", len(my_albums))
+        with col2:
+            total_likes = sum(len(a.get('likes', [])) for a in my_albums)
+            st.metric("❤️ Me gustas recibidos", total_likes)
+        with col3:
+            st.metric("🎸 Conciertos", len(my_concerts))
         
         st.divider()
         
         if my_albums or my_concerts:
             if my_albums:
-                st.write("### 🎵 My Albums")
+                st.write("### 🎵 Mis Álbumes")
                 for album in my_albums:
                     display_album_post(album)
             
             if my_concerts:
-                st.write("### 🎸 My Concerts")
+                st.write("### 🎸 Mis Conciertos")
                 for concert in my_concerts:
                     display_concert_post(concert)
         else:
-            st.info("📭 You haven't shared anything yet")
+            st.info("📭 Aún no has compartido nada")
 
 # ===========================
-# RUN APP
+# EJECUTAR APP
 # ===========================
 
 if __name__ == "__main__":

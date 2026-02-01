@@ -828,10 +828,10 @@ def main():
             for concert in my_concerts:
                 display_concert_post(concert)
         
-        if liked_concerts and st.session_state.current_user != "guest":
-            st.write("### 🤘 Liked Gigs")
-            for concert in liked_concerts:
-                display_concert_post(concert)
+        #if liked_concerts and st.session_state.current_user != "guest":
+        #    st.write("### 🤘 Liked Gigs")
+        #    for concert in liked_concerts:
+        #        display_concert_post(concert)
         
         if not my_albums and not my_concerts and not liked_albums and not liked_concerts:
             st.info("📭 You haven't shared or liked anything yet")

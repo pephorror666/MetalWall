@@ -38,10 +38,6 @@ st.markdown("""
     .clickable-image:hover {
         transform: scale(1.02);
     }
-    .tag-button {
-        margin-right: 5px;
-        margin-bottom: 5px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -270,7 +266,7 @@ def detect_platform(url):
     for key, value in platforms.items():
         if key in url.lower():
             return value
-    return 'Other'
+    return 'Music Service'
 
 def extract_artist(metadata, platform):
     """Extract artist name from title"""
@@ -479,47 +475,37 @@ def display_album_post(album):
         st.markdown(f'{album_name}', unsafe_allow_html=True)
         st.caption(f'📱 {platform} • {get_time_ago(timestamp)} • @{username}')
     
-    # Create a container for the bottom row with tags, like, and delete
-    bottom_container = st.container()
+    col_tags, col_like, col_delete = st.columns([3, 0.5, 0.5])
     
-    with bottom_container:
-        # Create columns for the bottom row
-        col_tags, col_like_delete = st.columns([3, 1])
+    with col_tags:
+        # Show tags in one line
+        if tags:
+            tags_html = ' '.join([f'#{tag}' for tag in tags])
+            st.markdown(tags_html, unsafe_allow_html=True)
         
-        with col_tags:
-            # Only show tag buttons, not the text tags
-            if tags:
-                # Create a horizontal container for tag buttons
-                tag_cols = st.columns(len(tags))
-                for idx, tag in enumerate(tags):
-                    with tag_cols[idx]:
-                        if st.button(f"🔍 {tag}", key=f"feed_tag_{album['id']}_{tag}", 
-                                    help=f"Filter by {tag}", use_container_width=True):
-                            st.session_state.active_filter_feed = tag
-                            st.rerun()
-        
-        with col_like_delete:
-            # Create sub-columns for like and delete within this column
-            like_col, delete_col = st.columns([2, 1])
-            
-            with like_col:
-                # Like button with count displayed next to it
-                like_text = f"{'❤️' if is_liked else '🤍'} {current_likes}"
-                if st.button(like_text, key=f"like_{album['id']}", 
-                           help="Like", use_container_width=True):
-                    if is_liked:
-                        likes.remove(st.session_state.current_user)
-                    else:
-                        likes.append(st.session_state.current_user)
-                    update_album_likes(album['id'], likes)
+        # Filter buttons in one line using horizontal container
+        tag_cols = st.columns(len(tags)) if tags else []
+        for idx, tag in enumerate(tags):
+            with tag_cols[idx]:
+                if st.button(f"🔍 {tag}", key=f"feed_tag_{album['id']}_{tag}", help=f"Filter by {tag}"):
+                    st.session_state.active_filter_feed = tag
                     st.rerun()
-            
-            with delete_col:
-                if st.session_state.current_user == username:
-                    if st.button("🗑️", key=f"delete_{album['id']}", 
-                               help="Delete", use_container_width=True):
-                        delete_album(album['id'])
-                        st.rerun()
+    
+    with col_like:
+        if st.button("❤️" if is_liked else "🤍", key=f"like_{album['id']}", help="Like"):
+            if is_liked:
+                likes.remove(st.session_state.current_user)
+            else:
+                likes.append(st.session_state.current_user)
+            update_album_likes(album['id'], likes)
+            st.rerun()
+        st.caption(f"{current_likes}")
+    
+    with col_delete:
+        if st.session_state.current_user == username:
+            if st.button("🗑️", key=f"delete_{album['id']}", help="Delete"):
+                delete_album(album['id'])
+                st.rerun()
     
     st.divider()
 
@@ -682,13 +668,22 @@ def main():
             with st.form("album_form_manual"):
                 artist = st.text_input("Artist", placeholder="Artist name", key="manual_artist")
                 album_name = st.text_input("Album Name", placeholder="Album title", key="manual_album")
-                url = st.text_input("Album URL", placeholder="https://...", key="manual_url")
+                url = st.text_input("Album URL (optional)", placeholder="https://...", key="manual_url")
                 cover_url = st.text_input("Cover URL (optional)", placeholder="https://...", key="manual_cover")
+                platform = st.selectbox(
+                    "Platform",
+                    ["Spotify", "Bandcamp", "YouTube", "SoundCloud", "Apple Music", "Tidal", "Deezer", "Other"],
+                    key="manual_platform"
+                )
                 tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags", key="manual_tags")
                 submitted_manual = st.form_submit_button("📝 Share Manually", use_container_width=True)
                 
                 if submitted_manual:
-                    if artist and album_name and url:
+                    if artist and album_name:
+                        # If no URL provided, use a placeholder
+                        if not url:
+                            url = "#"
+                        
                         tags = process_tags(tags_input)
                         if save_album(
                             st.session_state.current_user,
@@ -696,7 +691,7 @@ def main():
                             artist,
                             album_name,
                             cover_url,
-                            "Other",  # Set to "Other" by default
+                            platform,
                             tags
                         ):
                             st.success("✅ Album shared!")
@@ -704,7 +699,7 @@ def main():
                         else:
                             st.error("❌ Error saving")
                     else:
-                        st.warning("⚠️ Artist, Album Name, and Album URL are required")
+                        st.warning("⚠️ Artist and Album Name are required")
     
     # ============ PAGE: CONCERTS ============
     elif page == "🎸 Concerts":

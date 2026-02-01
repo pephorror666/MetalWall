@@ -18,8 +18,8 @@ import re
 # ===========================
 
 st.set_page_config(
-    page_title="Metal Music Social",
-    page_icon="🤘",
+    page_title="Metal Wall",
+    page_icon="🧱",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -584,12 +584,12 @@ def main():
         # ============ Navegación ============
         page = st.sidebar.radio(
             "📱 Navegación",
-            ["📜 Feed", "🎵 Nuevo Post", "🎸 Conciertos", "🏆 Ranking", "👤 Perfil"],
+            ["📜 Wall", "🎵 Post Record", "🎸 Gigs", "🏆 Ranking", "👤 User Stats"],
             label_visibility="collapsed"
         )
         
         st.sidebar.divider()
-        st.sidebar.markdown("🤘 Metal Music Social v3.3")
+        st.sidebar.markdown("🤘 MetalWall v0.1")
     
     # ============ SOLO SI ESTÁ AUTENTICADO ============
     if not st.session_state.current_user:
@@ -597,16 +597,16 @@ def main():
         return
     
     # ============ PÁGINA: FEED ============
-    if page == "📜 Feed":
-        st.subheader("📜 Feed Global")
+    if page == "📜 Wall":
+        st.subheader("📜 Wall")
         albums = load_albums()
         
         if st.session_state.active_filter_feed:
             col1, col2 = st.columns([3, 1])
             with col1:
-                st.info(f"🔍 Filtrado por: **#{st.session_state.active_filter_feed}**")
+                st.info(f"🔍 Filter by: **#{st.session_state.active_filter_feed}**")
             with col2:
-                if st.button("✖️ Limpiar filtro", key="clear_feed_filter"):
+                if st.button("✖️ Reset Filter", key="clear_feed_filter"):
                     st.session_state.active_filter_feed = None
                     st.rerun()
         
@@ -614,24 +614,24 @@ def main():
             albums = [a for a in albums if st.session_state.active_filter_feed.lower() in [t.lower() for t in a.get('tags', [])]]
         
         if not albums:
-            st.info("📭 No hay álbumes con este tag")
+            st.info("📭 No results")
         else:
             for album in albums:
                 display_album_post(album)
     
     # ============ PÁGINA: NUEVO POST ============
-    elif page == "🎵 Nuevo Post":
-        st.subheader("🎵 Nuevo Post")
-        st.write("Pega una URL de tu álbum favorito")
+    elif page == "🎵 Post Record":
+        st.subheader("🎵 Post Record")
+        st.write("Paste url from your favorite record")
         
         with st.form("album_form"):
             url = st.text_input("URL del álbum", placeholder="https://open.spotify.com/album/...")
-            tags_input = st.text_input("Tags", placeholder="Ej: #deathmetal #classicmetal", help="Máximo 5 tags")
-            submitted = st.form_submit_button("🚀 Compartir", use_container_width=True)
+            tags_input = st.text_input("Tags", placeholder="Ej: #deathmetal #thrashmetal #blackmetal", help="Max. 5 tags")
+            submitted = st.form_submit_button("🚀 Share", use_container_width=True)
             
             if submitted:
                 if url:
-                    with st.spinner("⏳ Extrayendo metadata..."):
+                    with st.spinner("⏳ Retrieving metadata..."):
                         metadata = extract_og_metadata(url)
                         if metadata:
                             tags = process_tags(tags_input)
@@ -644,25 +644,25 @@ def main():
                                 metadata['platform'],
                                 tags
                             ):
-                                st.success("✅ ¡Álbum compartido!")
+                                st.success("✅ Posted!")
                                 st.rerun()
                             else:
-                                st.error("❌ Error al guardar")
+                                st.error("❌ Error")
                         else:
-                            st.error("❌ No se pudo extraer la metadata. Verifica la URL")
+                            st.error("❌ Error. Verify the URL")
                 else:
-                    st.warning("⚠️ Pega una URL válida")
+                    st.warning("⚠️ Paste a valid URL")
     
     # ============ PÁGINA: CONCIERTOS ============
-    elif page == "🎸 Conciertos":
-        st.subheader("🎸 Conciertos")
+    elif page == "🎸 Gigs":
+        st.subheader("🎸 Gigs")
         delete_past_concerts()
         
         col1, col2 = st.columns([3, 1])
         with col1:
-            st.write("Próximos eventos de metal")
+            st.write("Upcoming gigs")
         with col2:
-            if st.button("➕ Nuevo Concierto"):
+            if st.button("➕ Add gig"):
                 st.session_state.show_concert_form = not st.session_state.show_concert_form
         
         if st.session_state.show_concert_form:

@@ -361,9 +361,10 @@ def extract_og_metadata(url):
         return None
 
 # ===========================
-# INITIALIZE SESSION STATE
+# INITIALIZE SESSION STATE WITH PERSISTENCE
 # ===========================
 
+# Enable session state persistence
 if 'current_user' not in st.session_state:
     st.session_state.current_user = None
 if 'show_album_form' not in st.session_state:
@@ -378,6 +379,12 @@ if 'active_filter_concerts' not in st.session_state:
     st.session_state.active_filter_concerts = None
 if 'show_manual_input' not in st.session_state:
     st.session_state.show_manual_input = False
+if 'remember_me' not in st.session_state:
+    st.session_state.remember_me = False
+if 'username_input' not in st.session_state:
+    st.session_state.username_input = ""
+if 'password_input' not in st.session_state:
+    st.session_state.password_input = ""
 
 init_db()
 
@@ -582,6 +589,9 @@ def main():
         if st.session_state.current_user:
             if st.button("🚪 Logout"):
                 st.session_state.current_user = None
+                st.session_state.remember_me = False
+                st.session_state.username_input = ""
+                st.session_state.password_input = ""
                 st.rerun()
     
     # ============ Sidebar - Authentication ============
@@ -589,9 +599,23 @@ def main():
         st.header("👤 User")
         if not st.session_state.current_user:
             st.subheader("Login")
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            if st.button("Login"):
+            
+            # Use session state to remember input values
+            username = st.text_input("Username", value=st.session_state.username_input, 
+                                   key="username_field")
+            password = st.text_input("Password", type="password", 
+                                   value=st.session_state.password_input,
+                                   key="password_field")
+            
+            # Remember me checkbox
+            remember_me = st.checkbox("Remember me", value=st.session_state.remember_me,
+                                    key="remember_checkbox")
+            
+            if st.button("Login", key="login_button"):
+                st.session_state.username_input = username
+                st.session_state.password_input = password
+                st.session_state.remember_me = remember_me
+                
                 ok, email = verify_credentials(username, password)
                 if ok:
                     st.session_state.current_user = username

@@ -1395,13 +1395,13 @@ def main():
             
             with col1:
                 st.write("### Automatic (from URL)")
-                st.write("Paste a URL of your favorite album")
+                st.write("Paste a Spotify, Deezer or Tidal URL")
                 
                 with st.form("album_form_auto", clear_on_submit=True):
                     url = st.text_input("Album URL", placeholder="https://open.spotify.com/album/...")
-                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", 
+                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #blackmetal #thrashmetal", 
                                              help="Maximum 5 tags")
-                    submitted_auto = st.form_submit_button("🚀 Share from URL", use_container_width=True)
+                    submitted_auto = st.form_submit_button("Post", use_container_width=True)
                     
                     if submitted_auto:
                         handle_album_submission(url, tags_input)
@@ -1415,9 +1415,9 @@ def main():
                     album_name = st.text_input("Album Name", placeholder="Album title")
                     url = st.text_input("Album URL", placeholder="https://...")
                     cover_url = st.text_input("Cover URL (optional)", placeholder="https://...")
-                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", 
+                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #blackmetal #thrashmetal", 
                                              help="Maximum 5 tags")
-                    submitted_manual = st.form_submit_button("📝 Share Manually", use_container_width=True)
+                    submitted_manual = st.form_submit_button("Post", use_container_width=True)
                     
                     if submitted_manual:
                         handle_album_submission(url, tags_input, True, artist, album_name, cover_url)

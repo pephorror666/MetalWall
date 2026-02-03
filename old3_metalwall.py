@@ -1,9 +1,10 @@
 # ===========================
-# METAL MUSIC SOCIAL - STREAMLIT APP v3.3
+# THE METAL WALL - STREAMLIT APP v0.3
 # ===========================
-# NEW: Universal Metadata Extractor (Open Graph)
-# Works with: Spotify, Bandcamp, Tidal, Apple Music, YouTube, SoundCloud, etc.
-# Like when you paste a link in WhatsApp - works ALWAYS
+# NEW: Session persistence with browser localStorage
+# NEW: Confirmation pop-ups and form reset
+# NEW: Guest browsing without login
+# NEW: Admin database backup/restore tools
 
 import streamlit as st
 import sqlite3
@@ -12,13 +13,17 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import json
 import re
+import os
+import shutil
+import tempfile
+import zipfile
 
 # ===========================
 # STREAMLIT CONFIGURATION
 # ===========================
 
 st.set_page_config(
-    page_title="Metal Music Social",
+    page_title="The Metal Wall",
     page_icon="🤘",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -37,6 +42,30 @@ st.markdown("""
     }
     .clickable-image:hover {
         transform: scale(1.02);
+    }
+    .tag-button {
+        margin-right: 5px;
+        margin-bottom: 2px;
+    }
+    /* Success notification styling */
+    .stSuccess {
+        background-color: #1a472a !important;
+        border-color: #2e7d32 !important;
+        color: #e0e0e0 !important;
+    }
+    .guest-notice {
+        background-color: #2d3748;
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
+        border-left: 4px solid #4299e1;
+    }
+    .admin-tools {
+        background-color: #1a1a2e;
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid #4a4a6a;
+        margin: 10px 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -244,6 +273,175 @@ def delete_past_concerts():
         st.error(f"Error cleaning concerts: {e}")
 
 # ===========================
+# ADMIN DATABASE BACKUP/RESTORE
+# ===========================
+
+def export_database_to_json():
+    """Export entire database to JSON format"""
+    try:
+        albums = load_albums()
+        concerts = load_concerts()
+        
+        export_data = {
+            'export_date': datetime.now().isoformat(),
+            'app_version': 'MetalWall v0.3',
+            'albums_count': len(albums),
+            'concerts_count': len(concerts),
+            'albums': albums,
+            'concerts': concerts
+        }
+        
+        # Convert datetime objects to strings
+        json_str = json.dumps(export_data, indent=2, default=str)
+        return json_str
+    except Exception as e:
+        st.error(f"Error exporting database: {e}")
+        return None
+
+def import_database_from_json(json_data):
+    """Import database from JSON"""
+    try:
+        data = json.loads(json_data)
+        
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        
+        # Clear existing data
+        c.execute('DELETE FROM albums')
+        c.execute('DELETE FROM concerts')
+        
+        # Import albums
+        for album in data.get('albums', []):
+            c.execute('''
+            INSERT INTO albums (id, username, url, artist, album_name, cover_url, 
+                              platform, tags, likes, timestamp, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                album['id'],
+                album['username'],
+                album['url'],
+                album['artist'],
+                album['album_name'],
+                album.get('cover_url', ''),
+                album.get('platform', 'Other'),
+                str(album.get('tags', [])),
+                str(album.get('likes', [])),
+                album['timestamp'],
+                album.get('created_at', album['timestamp'])
+            ))
+        
+        # Import concerts
+        for concert in data.get('concerts', []):
+            c.execute('''
+            INSERT INTO concerts (id, username, bands, date, venue, city, 
+                                tags, info, likes, timestamp, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                concert['id'],
+                concert['username'],
+                concert['bands'],
+                concert['date'],
+                concert['venue'],
+                concert['city'],
+                str(concert.get('tags', [])),
+                concert.get('info', ''),
+                str(concert.get('likes', [])),
+                concert['timestamp'],
+                concert.get('created_at', concert['timestamp'])
+            ))
+        
+        conn.commit()
+        conn.close()
+        return True, f"Successfully imported {len(data.get('albums', []))} albums and {len(data.get('concerts', []))} concerts"
+    except Exception as e:
+        return False, f"Error importing database: {e}"
+
+def backup_database():
+    """Create a backup of the database file"""
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_filename = f"metal_music_backup_{timestamp}.db"
+        
+        # Copy the database file
+        shutil.copy2(DB_PATH, backup_filename)
+        
+        # Also create a backup directory for organization
+        if not os.path.exists("backups"):
+            os.makedirs("backups")
+        shutil.copy2(DB_PATH, f"backups/{backup_filename}")
+        
+        return backup_filename
+    except Exception as e:
+        st.error(f"Error creating backup: {e}")
+        return None
+
+def restore_database_from_file(uploaded_file):
+    """Restore database from uploaded .db file"""
+    try:
+        # Create a backup before restoring
+        backup_filename = backup_database()
+        
+        # Write uploaded file to database location
+        with open(DB_PATH, 'wb') as f:
+            f.write(uploaded_file.getbuffer())
+        
+        # Verify the restored database
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        
+        # Check if tables exist
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('albums', 'concerts')")
+        tables = c.fetchall()
+        
+        conn.close()
+        
+        if len(tables) == 2:
+            return True, f"Database restored successfully. Backup saved as {backup_filename}"
+        else:
+            # Restore from backup if tables don't exist
+            if backup_filename and os.path.exists(backup_filename):
+                shutil.copy2(backup_filename, DB_PATH)
+            return False, "Invalid database file. Backup restored."
+    except Exception as e:
+        return False, f"Error restoring database: {e}"
+
+def get_database_stats():
+    """Get database statistics"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        
+        # Count albums
+        c.execute('SELECT COUNT(*) FROM albums')
+        album_count = c.fetchone()[0]
+        
+        # Count concerts
+        c.execute('SELECT COUNT(*) FROM concerts')
+        concert_count = c.fetchone()[0]
+        
+        # Get latest entries
+        c.execute('SELECT MAX(timestamp) FROM albums')
+        latest_album = c.fetchone()[0]
+        
+        c.execute('SELECT MAX(timestamp) FROM concerts')
+        latest_concert = c.fetchone()[0]
+        
+        # Get database size
+        db_size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
+        
+        conn.close()
+        
+        return {
+            'album_count': album_count,
+            'concert_count': concert_count,
+            'latest_album': latest_album,
+            'latest_concert': latest_concert,
+            'db_size_mb': db_size / (1024 * 1024)
+        }
+    except Exception as e:
+        return None
+
+# ===========================
 # UNIVERSAL METADATA EXTRACTOR
 # ===========================
 
@@ -266,7 +464,7 @@ def detect_platform(url):
     for key, value in platforms.items():
         if key in url.lower():
             return value
-    return 'Music Service'
+    return 'Other'
 
 def extract_artist(metadata, platform):
     """Extract artist name from title"""
@@ -357,9 +555,55 @@ def extract_og_metadata(url):
         return None
 
 # ===========================
+# SESSION PERSISTENCE WITH QUERY PARAMS
+# ===========================
+
+def save_session_to_storage():
+    """Save current session state to browser's localStorage using query params"""
+    if st.session_state.get('remember_me', False) and st.session_state.get('current_user'):
+        session_data = {
+            'username': st.session_state.current_user,
+            'remember_me': True,
+            'timestamp': datetime.now().isoformat()
+        }
+        # Encode the session data and set it as a query parameter
+        import base64
+        encoded_data = base64.urlsafe_b64encode(json.dumps(session_data).encode()).decode()
+        st.query_params['session'] = encoded_data
+
+def load_session_from_storage():
+    """Load session from query parameters"""
+    try:
+        if 'session' in st.query_params:
+            import base64
+            encoded_data = st.query_params['session']
+            session_data = json.loads(base64.urlsafe_b64decode(encoded_data).decode())
+            
+            # Check if session is not too old (7 days max)
+            session_time = datetime.fromisoformat(session_data['timestamp'])
+            if (datetime.now() - session_time).days < 7:
+                st.session_state.current_user = session_data['username']
+                st.session_state.remember_me = session_data['remember_me']
+                return True
+    except:
+        pass
+    return False
+
+def clear_session_storage():
+    """Clear the session from query params"""
+    # Clear only the session parameter
+    params = dict(st.query_params)
+    if 'session' in params:
+        del params['session']
+        st.query_params.clear()
+        for key, value in params.items():
+            st.query_params[key] = value
+
+# ===========================
 # INITIALIZE SESSION STATE
 # ===========================
 
+# Initialize session state variables
 if 'current_user' not in st.session_state:
     st.session_state.current_user = None
 if 'show_album_form' not in st.session_state:
@@ -374,6 +618,20 @@ if 'active_filter_concerts' not in st.session_state:
     st.session_state.active_filter_concerts = None
 if 'show_manual_input' not in st.session_state:
     st.session_state.show_manual_input = False
+if 'remember_me' not in st.session_state:
+    st.session_state.remember_me = False
+if 'username_input' not in st.session_state:
+    st.session_state.username_input = ""
+if 'password_input' not in st.session_state:
+    st.session_state.password_input = ""
+if 'form_submitted' not in st.session_state:
+    st.session_state.form_submitted = False
+if 'success_message' not in st.session_state:
+    st.session_state.success_message = ""
+
+# Try to load session from storage
+if st.session_state.current_user is None:
+    load_session_from_storage()
 
 init_db()
 
@@ -443,12 +701,72 @@ def process_tags(tags_str):
                 tags.append(tag)
     return tags[:5]
 
+def show_success_message(message):
+    """Show a success message"""
+    st.session_state.success_message = message
+    st.session_state.form_submitted = True
+    st.success(message)
+
+# ===========================
+# NEW FEATURES
+# ===========================
+
+# 1. Add duplicate URL check function
+def check_duplicate_url(url):
+    """Check if URL already exists in database to avoid duplicates"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*) FROM albums WHERE url = ?', (url,))
+        count = c.fetchone()[0]
+        conn.close()
+        return count > 0
+    except Exception as e:
+        st.error(f"Error checking duplicate: {e}")
+        return False
+
+# 2. Update album function
+def update_album(album_id, url, artist, album_name, cover_url, platform, tags):
+    """Update an existing album"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+        UPDATE albums 
+        SET url = ?, artist = ?, album_name = ?, cover_url = ?, platform = ?, tags = ?
+        WHERE id = ?
+        ''', (url, artist, album_name, cover_url, platform, str(tags), album_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Error updating album: {e}")
+        return False
+
+# 3. Update concert function
+def update_concert(concert_id, bands, date, venue, city, tags, info):
+    """Update an existing concert"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+        UPDATE concerts 
+        SET bands = ?, date = ?, venue = ?, city = ?, tags = ?, info = ?
+        WHERE id = ?
+        ''', (bands, date, venue, city, str(tags), info, concert_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Error updating concert: {e}")
+        return False
+
 # ===========================
 # UI COMPONENTS
 # ===========================
 
 def display_album_post(album):
-    """Display an album post like Twitter/Mastodon"""
+    """Display an album post like Twitter/Mastodon with edit functionality"""
     cover_url = album.get('cover_url', '')
     username = album.get('username', 'Unknown')
     url = album.get('url', '#')
@@ -458,6 +776,55 @@ def display_album_post(album):
     timestamp = album.get('timestamp', '')
     tags = album.get('tags', [])
     
+    # Check if current user can edit this post
+    can_edit = (st.session_state.current_user == "Admin" or 
+                st.session_state.current_user == username)
+    
+    # Check if we're in edit mode for this album
+    is_editing = st.session_state.get(f'editing_album_{album["id"]}', False)
+    
+    # If editing mode is active, show edit form
+    if is_editing and can_edit:
+        with st.container():
+            st.markdown("### ✏️ Edit Album")
+            with st.form(f"edit_album_form_{album['id']}"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    new_artist = st.text_input("Artist", value=artist, key=f"edit_artist_{album['id']}")
+                    new_album_name = st.text_input("Album Name", value=album_name, key=f"edit_album_name_{album['id']}")
+                    new_url = st.text_input("Album URL", value=url, key=f"edit_url_{album['id']}")
+                
+                with col2:
+                    new_cover_url = st.text_input("Cover URL", value=cover_url if cover_url else "", 
+                                                 key=f"edit_cover_{album['id']}")
+                    new_platform = st.text_input("Platform", value=platform, key=f"edit_platform_{album['id']}")
+                    tags_str = " ".join([f"#{tag}" for tag in tags])
+                    new_tags_input = st.text_input("Tags", value=tags_str, 
+                                                  placeholder="#tag1 #tag2 #tag3",
+                                                  key=f"edit_tags_{album['id']}")
+                
+                col_save, col_cancel = st.columns(2)
+                with col_save:
+                    if st.form_submit_button("💾 Save Changes", use_container_width=True):
+                        new_tags = process_tags(new_tags_input)
+                        if update_album(album['id'], new_url, new_artist, new_album_name, 
+                                       new_cover_url, new_platform, new_tags):
+                            st.session_state[f'editing_album_{album["id"]}'] = False
+                            show_success_message("✅ Album updated successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error updating album")
+                
+                with col_cancel:
+                    if st.form_submit_button("❌ Cancel", use_container_width=True):
+                        st.session_state[f'editing_album_{album["id"]}'] = False
+                        st.rerun()
+            
+            st.divider()
+            return  # Skip normal display when editing
+    
+    # Normal display (when not editing)
     if cover_url:
         cover_html = f'<a href="{url}" target="_blank" style="text-decoration: none;"><img src="{cover_url}" class="clickable-image" style="width:100%; border-radius:8px; object-fit:cover; height:180px;"></a>'
     else:
@@ -465,7 +832,7 @@ def display_album_post(album):
     
     likes = album.get('likes', [])
     current_likes = len(likes)
-    is_liked = st.session_state.current_user in likes
+    is_liked = st.session_state.current_user in likes if st.session_state.current_user else False
     
     col1, col2 = st.columns([1.3, 3.5])
     with col1:
@@ -475,42 +842,92 @@ def display_album_post(album):
         st.markdown(f'{album_name}', unsafe_allow_html=True)
         st.caption(f'📱 {platform} • {get_time_ago(timestamp)} • @{username}')
     
-    col_tags, col_like, col_delete = st.columns([3, 0.5, 0.5])
+    # Create a container for the bottom row with tags, like, edit, and delete
+    bottom_container = st.container()
     
-    with col_tags:
-        # Show tags in one line
-        if tags:
-            tags_html = ' '.join([f'#{tag}' for tag in tags])
-            st.markdown(tags_html, unsafe_allow_html=True)
+    with bottom_container:
+        # Create columns for the bottom row
+        col_tags, col_actions = st.columns([3, 1])
         
-        # Filter buttons in one line using horizontal container
-        tag_cols = st.columns(len(tags)) if tags else []
-        for idx, tag in enumerate(tags):
-            with tag_cols[idx]:
-                if st.button(f"🔍 {tag}", key=f"feed_tag_{album['id']}_{tag}", help=f"Filter by {tag}"):
-                    st.session_state.active_filter_feed = tag
-                    st.rerun()
-    
-    with col_like:
-        if st.button("❤️" if is_liked else "🤍", key=f"like_{album['id']}", help="Like"):
-            if is_liked:
-                likes.remove(st.session_state.current_user)
+        with col_tags:
+            # Only show tag buttons, not the text tags
+            if tags:
+                # Create a horizontal container for tag buttons
+                tag_cols = st.columns(len(tags))
+                for idx, tag in enumerate(tags):
+                    with tag_cols[idx]:
+                        if st.button(f"#{tag}", key=f"feed_tag_{album['id']}_{tag}", 
+                                    help=f"Filter by {tag}", use_container_width=True):
+                            st.session_state.active_filter_feed = tag
+                            st.rerun()
+        
+        with col_actions:
+            # Create sub-columns for actions within this column
+            if can_edit:
+                # Show both edit and delete for users who can edit
+                edit_col, like_col, delete_col = st.columns([1, 2, 1])
+                
+                with edit_col:
+                    if st.button("✏️", key=f"edit_{album['id']}", 
+                               help="Edit", use_container_width=True):
+                        st.session_state[f'editing_album_{album["id"]}'] = True
+                        st.rerun()
+                
+                with like_col:
+                    # Like button with count displayed next to it
+                    if st.session_state.current_user:
+                        like_text = f"{'❤️' if is_liked else '🤍'} {current_likes}"
+                        if st.button(like_text, key=f"like_{album['id']}", 
+                                   help="Like", use_container_width=True):
+                            if is_liked:
+                                likes.remove(st.session_state.current_user)
+                            else:
+                                likes.append(st.session_state.current_user)
+                            update_album_likes(album['id'], likes)
+                            st.rerun()
+                    else:
+                        # For guest, just show the likes count
+                        st.markdown(f"❤️ {current_likes}")
+                
+                with delete_col:
+                    if st.button("🗑️", key=f"delete_{album['id']}", 
+                               help="Delete", use_container_width=True):
+                        delete_album(album['id'])
+                        show_success_message("✅ Album deleted successfully!")
+                        st.rerun()
             else:
-                likes.append(st.session_state.current_user)
-            update_album_likes(album['id'], likes)
-            st.rerun()
-        st.caption(f"{current_likes}")
-    
-    with col_delete:
-        if st.session_state.current_user == username:
-            if st.button("🗑️", key=f"delete_{album['id']}", help="Delete"):
-                delete_album(album['id'])
-                st.rerun()
+                # For users who cannot edit, show like and delete (for admin only)
+                like_col, delete_col = st.columns([2, 1])
+                
+                with like_col:
+                    if st.session_state.current_user:
+                        like_text = f"{'❤️' if is_liked else '🤍'} {current_likes}"
+                        if st.button(like_text, key=f"like_{album['id']}", 
+                                   help="Like", use_container_width=True):
+                            if is_liked:
+                                likes.remove(st.session_state.current_user)
+                            else:
+                                likes.append(st.session_state.current_user)
+                            update_album_likes(album['id'], likes)
+                            st.rerun()
+                    else:
+                        # For guest, just show the likes count
+                        st.markdown(f"❤️ {current_likes}")
+                
+                with delete_col:
+                    # Admin can delete any post
+                    if st.session_state.current_user == "Admin":
+                        if st.button("🗑️", key=f"delete_{album['id']}", 
+                                   help="Delete", use_container_width=True):
+                            delete_album(album['id'])
+                            show_success_message("✅ Album deleted successfully!")
+                            st.rerun()
     
     st.divider()
 
+
 def display_concert_post(concert):
-    """Display a concert post without tags or like button"""
+    """Display a concert post with edit functionality"""
     bands = concert.get('bands', 'Unknown')
     date = concert.get('date', '')
     venue = concert.get('venue', 'Unknown')
@@ -519,6 +936,57 @@ def display_concert_post(concert):
     username = concert.get('username', 'Unknown')
     timestamp = concert.get('timestamp', '')
     
+    # Check if current user can edit this concert
+    can_edit = (st.session_state.current_user == "Admin" or 
+                st.session_state.current_user == username)
+    
+    # Check if we're in edit mode for this concert
+    is_editing = st.session_state.get(f'editing_concert_{concert["id"]}', False)
+    
+    # If editing mode is active, show edit form
+    if is_editing and can_edit:
+        with st.container():
+            st.markdown("### ✏️ Edit Concert")
+            with st.form(f"edit_concert_form_{concert['id']}"):
+                new_bands = st.text_input("Bands", value=bands, 
+                                         key=f"edit_bands_{concert['id']}")
+                new_date = st.date_input("Date", value=datetime.strptime(date, '%Y-%m-%d').date(), 
+                                        key=f"edit_date_{concert['id']}")
+                new_venue = st.text_input("Venue", value=venue, 
+                                         key=f"edit_venue_{concert['id']}")
+                new_city = st.text_input("City", value=city, 
+                                        key=f"edit_city_{concert['id']}")
+                
+                current_tags = concert.get('tags', [])
+                tags_str = " ".join([f"#{tag}" for tag in current_tags])
+                new_tags_input = st.text_input("Tags", value=tags_str, 
+                                              placeholder="#tag1 #tag2 #tag3",
+                                              key=f"edit_tags_concert_{concert['id']}")
+                
+                new_info = st.text_area("Additional info", value=info, 
+                                       key=f"edit_info_{concert['id']}")
+                
+                col_save, col_cancel = st.columns(2)
+                with col_save:
+                    if st.form_submit_button("💾 Save Changes", use_container_width=True):
+                        new_tags = process_tags(new_tags_input)
+                        if update_concert(concert['id'], new_bands, new_date, new_venue, 
+                                        new_city, new_tags, new_info):
+                            st.session_state[f'editing_concert_{concert["id"]}'] = False
+                            show_success_message("✅ Concert updated successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error updating concert")
+                
+                with col_cancel:
+                    if st.form_submit_button("❌ Cancel", use_container_width=True):
+                        st.session_state[f'editing_concert_{concert["id"]}'] = False
+                        st.rerun()
+            
+            st.divider()
+            return  # Skip normal display when editing
+    
+    # Normal display (when not editing)
     days_until = get_days_until(date)
     date_display = format_date_display(date)
     
@@ -539,13 +1007,246 @@ def display_concert_post(concert):
     
     st.caption(f'{get_time_ago(timestamp)} • @{username}')
     
-    # Only delete button, no tags or like
-    if st.session_state.current_user == concert['username']:
-        if st.button("🗑️", key=f"delete_concert_{concert['id']}", help="Delete"):
-            delete_concert(concert['id'])
-            st.rerun()
+    # Action buttons container
+    col_actions = st.columns([1, 1])[0]  # Single column for actions
+    
+    with col_actions:
+        if can_edit:
+            # Show edit and delete buttons
+            edit_col, delete_col = st.columns(2)
+            
+            with edit_col:
+                if st.button("✏️ Edit", key=f"edit_concert_{concert['id']}", 
+                           help="Edit concert", use_container_width=True):
+                    st.session_state[f'editing_concert_{concert["id"]}'] = True
+                    st.rerun()
+            
+            with delete_col:
+                if st.button("🗑️ Delete", key=f"delete_concert_{concert['id']}", 
+                           help="Delete concert", use_container_width=True):
+                    delete_concert(concert['id'])
+                    show_success_message("✅ Concert deleted successfully!")
+                    st.rerun()
+        else:
+            # Admin can delete any concert
+            if st.session_state.current_user == "Admin":
+                if st.button("🗑️ Delete", key=f"delete_concert_{concert['id']}", 
+                           help="Delete concert", use_container_width=True):
+                    delete_concert(concert['id'])
+                    show_success_message("✅ Concert deleted successfully!")
+                    st.rerun()
     
     st.divider()
+
+# ===========================
+# FORM HANDLING
+# ===========================
+
+def handle_album_submission(url, tags_input, is_manual=False, artist="", album_name="", cover_url=""):
+    """Handle album form submission with duplicate check"""
+    # Check for duplicate URL
+    if check_duplicate_url(url):
+        st.error("❌ This URL has already been posted. Please share a different album.")
+        return False
+    
+    if is_manual:
+        if artist and album_name and url:
+            tags = process_tags(tags_input)
+            if save_album(
+                st.session_state.current_user,
+                url,
+                artist,
+                album_name,
+                cover_url,
+                "Other",
+                tags
+            ):
+                show_success_message("✅ Album shared successfully!")
+                return True
+            else:
+                st.error("❌ Error saving")
+                return False
+        else:
+            st.warning("⚠️ Artist, Album Name, and Album URL are required")
+            return False
+    else:
+        if url:
+            with st.spinner("⏳ Extracting metadata..."):
+                metadata = extract_og_metadata(url)
+                if metadata:
+                    tags = process_tags(tags_input)
+                    if save_album(
+                        st.session_state.current_user,
+                        url,
+                        metadata['artist'],
+                        metadata['album_name'],
+                        metadata['cover_url'],
+                        metadata['platform'],
+                        tags
+                    ):
+                        show_success_message("✅ Album shared successfully!")
+                        return True
+                    else:
+                        st.error("❌ Error saving")
+                        return False
+                else:
+                    st.error("❌ Could not extract metadata. Verify the URL or use Manual Input")
+                    return False
+        else:
+            st.warning("⚠️ Please paste a valid URL")
+            return False
+
+# ===========================
+# ADMIN BACKUP/RESTORE PAGE
+# ===========================
+
+def admin_backup_page():
+    """Admin database backup and restore page"""
+    st.subheader("🔧 Admin Tools - Database Management")
+    
+    # Show database statistics
+    stats = get_database_stats()
+    if stats:
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("📊 Albums", stats['album_count'])
+        with col2:
+            st.metric("🎸 Concerts", stats['concert_count'])
+        with col3:
+            st.metric("🗄️ DB Size", f"{stats['db_size_mb']:.2f} MB")
+        with col4:
+            st.metric("🔄 Last Backup", "Click to create")
+    
+    st.markdown("---")
+    
+    # Create two columns for Export and Import
+    col_export, col_import = st.columns(2)
+    
+    with col_export:
+        st.markdown("### 📤 Export Database")
+        st.markdown("<div class='admin-tools'>", unsafe_allow_html=True)
+        
+        # Export to JSON
+        st.write("**Export to JSON**")
+        st.write("Export all data as a JSON file for backup or migration.")
+        
+        if st.button("📄 Export to JSON", key="export_json", use_container_width=True):
+            json_data = export_database_to_json()
+            if json_data:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"metalwall_backup_{timestamp}.json"
+                
+                st.download_button(
+                    label="⬇️ Download JSON File",
+                    data=json_data,
+                    file_name=filename,
+                    mime="application/json",
+                    use_container_width=True
+                )
+                st.success("✅ JSON export ready for download")
+            else:
+                st.error("❌ Failed to export database")
+        
+        st.divider()
+        
+        # Export to SQLite DB
+        st.write("**Export Database File**")
+        st.write("Download the complete SQLite database file.")
+        
+        if st.button("🗃️ Export Database File", key="export_db", use_container_width=True):
+            if os.path.exists(DB_PATH):
+                with open(DB_PATH, "rb") as f:
+                    db_data = f.read()
+                
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"metal_music_backup_{timestamp}.db"
+                
+                st.download_button(
+                    label="⬇️ Download Database File",
+                    data=db_data,
+                    file_name=filename,
+                    mime="application/x-sqlite3",
+                    use_container_width=True
+                )
+                st.success("✅ Database file ready for download")
+            else:
+                st.error("❌ Database file not found")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    with col_import:
+        st.markdown("### 📥 Import Database")
+        st.markdown("<div class='admin-tools'>", unsafe_allow_html=True)
+        
+        # Import from JSON
+        st.write("**Import from JSON**")
+        st.write("Import data from a JSON backup file.")
+        st.warning("⚠️ This will replace all existing data!")
+        
+        json_file = st.file_uploader("Choose JSON file", type=['json'], key="json_upload")
+        
+        if json_file is not None:
+            if st.button("🔄 Import from JSON", key="import_json", use_container_width=True):
+                try:
+                    json_data = json_file.getvalue().decode('utf-8')
+                    success, message = import_database_from_json(json_data)
+                    if success:
+                        st.success(f"✅ {message}")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {message}")
+                except Exception as e:
+                    st.error(f"❌ Error reading JSON file: {e}")
+        
+        st.divider()
+        
+        # Import from SQLite DB
+        st.write("**Import Database File**")
+        st.write("Upload and replace the entire database file.")
+        st.warning("⚠️ This will completely replace the current database!")
+        
+        db_file = st.file_uploader("Choose SQLite database file", type=['db', 'sqlite', 'sqlite3'], key="db_upload")
+        
+        if db_file is not None:
+            if st.button("🔄 Import Database File", key="import_db", use_container_width=True):
+                with st.spinner("Restoring database..."):
+                    success, message = restore_database_from_file(db_file)
+                    if success:
+                        st.success(f"✅ {message}")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {message}")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Quick Backup Section
+    st.markdown("---")
+    st.markdown("### ⚡ Quick Actions")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("💾 Create Quick Backup", key="quick_backup", use_container_width=True):
+            backup_filename = backup_database()
+            if backup_filename:
+                st.success(f"✅ Backup created: {backup_filename}")
+            else:
+                st.error("❌ Failed to create backup")
+    
+    with col2:
+        if st.button("🔍 Verify Database", key="verify_db", use_container_width=True):
+            stats = get_database_stats()
+            if stats:
+                st.info(f"""
+                **Database Status:**
+                - Albums: {stats['album_count']}
+                - Concerts: {stats['concert_count']}
+                - Size: {stats['db_size_mb']:.2f} MB
+                - Latest album: {stats['latest_album'][:19] if stats['latest_album'] else 'N/A'}
+                - Latest concert: {stats['latest_concert'][:19] if stats['latest_concert'] else 'N/A'}
+                """)
+            else:
+                st.error("❌ Could not verify database")
 
 # ===========================
 # MAIN PAGE
@@ -557,50 +1258,99 @@ def main():
     # ============ Header ============
     col1, col2 = st.columns([0.8, 0.2])
     with col1:
-        st.title("🤘 Metal Music Social")
+        st.title("🤘 The Metal Wall")
     with col2:
         if st.session_state.current_user:
             if st.button("🚪 Logout"):
+                clear_session_storage()
                 st.session_state.current_user = None
+                st.session_state.remember_me = False
+                st.session_state.username_input = ""
+                st.session_state.password_input = ""
+                st.rerun()
+        else:
+            if st.button("👤 Login", key="header_login"):
+                st.query_params['show_login'] = "true"
                 st.rerun()
     
-    # ============ Sidebar - Authentication ============
+    # ============ Sidebar ============
     with st.sidebar:
         st.header("👤 User")
-        if not st.session_state.current_user:
-            st.subheader("Login")
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            if st.button("Login"):
-                ok, email = verify_credentials(username, password)
-                if ok:
-                    st.session_state.current_user = username
-                    st.rerun()
-                else:
-                    st.error("❌ Invalid credentials")
+        
+        # Show login form if user is not logged in or if show_login is in query params
+        if not st.session_state.current_user or 'show_login' in st.query_params:
+            if 'show_login' in st.query_params:
+                st.subheader("Login")
+            else:
+                st.markdown("### 👋 Welcome!")
+                st.markdown("You're browsing as a guest. Login to post content.")
+            
+            # Remove show_login from query params if it exists
+            if 'show_login' in st.query_params:
+                # Create a copy of query params and remove show_login
+                params = dict(st.query_params)
+                del params['show_login']
+                st.query_params.clear()
+                for key, value in params.items():
+                    st.query_params[key] = value
+            
+            # Login form
+            with st.form("login_form"):
+                username = st.text_input("Username", key="login_username")
+                password = st.text_input("Password", type="password", key="login_password")
+                remember_me = st.checkbox("Remember me", key="login_remember")
+                
+                submitted = st.form_submit_button("Login", use_container_width=True)
+                
+                if submitted:
+                    ok, email = verify_credentials(username, password)
+                    if ok:
+                        st.session_state.current_user = username
+                        st.session_state.remember_me = remember_me
+                        if remember_me:
+                            save_session_to_storage()
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid credentials")
         else:
             st.success(f"✅ Connected as @{st.session_state.current_user}")
+            if st.session_state.current_user == "Admin":
+                st.info("🔧 Admin privileges enabled")
         
         st.divider()
         
         # ============ Navigation ============
+        # Admin gets extra navigation option
+        if st.session_state.current_user == "Admin":
+            nav_options = ["💿 Records", "🎵 New Post", "🎸 Gigs", "🏆 Ranking", "👤 Profile", "🔧 Admin Tools"]
+        else:
+            nav_options = ["💿 Records", "🎵 New Post", "🎸 Gigs", "🏆 Ranking", "👤 Profile"]
+        
         page = st.sidebar.radio(
             "📱 Navigation",
-            ["📜 Feed", "🎵 New Post", "🎸 Concerts", "🏆 Ranking", "👤 Profile"],
+            nav_options,
             label_visibility="collapsed"
         )
         
         st.sidebar.divider()
-        st.sidebar.markdown("🤘 Metal Music Social v3.3")
+        st.sidebar.markdown("\\m/ MetalWall v0.3")
+        if st.session_state.current_user:
+            st.sidebar.caption("Session persistence enabled")
     
-    # ============ ONLY IF AUTHENTICATED ============
-    if not st.session_state.current_user:
-        st.warning("⚠️ Please login first")
-        return
-    
-    # ============ PAGE: FEED ============
-    if page == "📜 Feed":
-        st.subheader("📜 Global Feed")
+    # ============ PAGE: RECORDS ============
+    if page == "💿 Records":
+        st.subheader("💿 Records Wall")
+        
+        # Show guest notice if not logged in
+        if not st.session_state.current_user:
+            st.markdown("""
+            <div class="guest-notice">
+            👀 You're browsing as a guest. You can view all content but need to 
+            <strong><a href="#" onclick="window.location.href='?show_login=true'">login</a></strong> 
+            to like, post, or delete content.
+            </div>
+            """, unsafe_allow_html=True)
+        
         albums = load_albums()
         
         if st.session_state.active_filter_feed:
@@ -608,7 +1358,7 @@ def main():
             with col1:
                 st.info(f"🔍 Filtered by: **#{st.session_state.active_filter_feed}**")
             with col2:
-                if st.button("✖️ Clear filter", key="clear_feed_filter"):
+                if st.button("✖️ Clear filter", key="clear_feed_filter", use_container_width=True):
                     st.session_state.active_filter_feed = None
                     st.rerun()
         
@@ -625,96 +1375,72 @@ def main():
     elif page == "🎵 New Post":
         st.subheader("🎵 New Post")
         
-        # Create two columns for the two input methods
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("### Automatic (from URL)")
-            st.write("Paste a URL of your favorite album")
+        # Check if user is logged in
+        if not st.session_state.current_user:
+            st.warning("""
+            🔒 **Login Required**
             
-            with st.form("album_form_auto"):
-                url = st.text_input("Album URL", placeholder="https://open.spotify.com/album/...", key="auto_url")
-                tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags", key="auto_tags")
-                submitted_auto = st.form_submit_button("🚀 Share from URL", use_container_width=True)
-                
-                if submitted_auto:
-                    if url:
-                        with st.spinner("⏳ Extracting metadata..."):
-                            metadata = extract_og_metadata(url)
-                            if metadata:
-                                tags = process_tags(tags_input)
-                                if save_album(
-                                    st.session_state.current_user,
-                                    url,
-                                    metadata['artist'],
-                                    metadata['album_name'],
-                                    metadata['cover_url'],
-                                    metadata['platform'],
-                                    tags
-                                ):
-                                    st.success("✅ Album shared!")
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Error saving")
-                            else:
-                                st.error("❌ Could not extract metadata. Verify the URL or use Manual Input")
-                    else:
-                        st.warning("⚠️ Please paste a valid URL")
-        
-        with col2:
-            st.write("### Manual Input")
-            st.write("For platforms without automatic metadata")
+            You need to login to share albums. 
             
-            with st.form("album_form_manual"):
-                artist = st.text_input("Artist", placeholder="Artist name", key="manual_artist")
-                album_name = st.text_input("Album Name", placeholder="Album title", key="manual_album")
-                url = st.text_input("Album URL (optional)", placeholder="https://...", key="manual_url")
-                cover_url = st.text_input("Cover URL (optional)", placeholder="https://...", key="manual_cover")
-                platform = st.selectbox(
-                    "Platform",
-                    ["Spotify", "Bandcamp", "YouTube", "SoundCloud", "Apple Music", "Tidal", "Deezer", "Other"],
-                    key="manual_platform"
-                )
-                tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #classicmetal", help="Maximum 5 tags", key="manual_tags")
-                submitted_manual = st.form_submit_button("📝 Share Manually", use_container_width=True)
+            Please use the login form in the sidebar or click the Login button in the header.
+            """)
+        else:
+            # Show success message if form was just submitted
+            if st.session_state.get('form_submitted'):
+                st.success(st.session_state.success_message)
+                st.session_state.form_submitted = False
+            
+            # Create two columns for the two input methods
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("### Automatic (from URL)")
+                st.write("Paste a Spotify, Deezer or Tidal URL")
                 
-                if submitted_manual:
-                    if artist and album_name:
-                        # If no URL provided, use a placeholder
-                        if not url:
-                            url = "#"
-                        
-                        tags = process_tags(tags_input)
-                        if save_album(
-                            st.session_state.current_user,
-                            url,
-                            artist,
-                            album_name,
-                            cover_url,
-                            platform,
-                            tags
-                        ):
-                            st.success("✅ Album shared!")
-                            st.rerun()
-                        else:
-                            st.error("❌ Error saving")
-                    else:
-                        st.warning("⚠️ Artist and Album Name are required")
+                with st.form("album_form_auto", clear_on_submit=True):
+                    url = st.text_input("Album URL", placeholder="https://open.spotify.com/album/...")
+                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #blackmetal #thrashmetal", 
+                                             help="Maximum 5 tags")
+                    submitted_auto = st.form_submit_button("Post", use_container_width=True)
+                    
+                    if submitted_auto:
+                        handle_album_submission(url, tags_input)
+            
+            with col2:
+                st.write("### Manual Input")
+                st.write("For platforms without automatic metadata")
+                
+                with st.form("album_form_manual", clear_on_submit=True):
+                    artist = st.text_input("Artist", placeholder="Artist name")
+                    album_name = st.text_input("Album Name", placeholder="Album title")
+                    url = st.text_input("Album URL", placeholder="https://...")
+                    cover_url = st.text_input("Cover URL (optional)", placeholder="https://...")
+                    tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #blackmetal #thrashmetal", 
+                                             help="Maximum 5 tags")
+                    submitted_manual = st.form_submit_button("Post", use_container_width=True)
+                    
+                    if submitted_manual:
+                        handle_album_submission(url, tags_input, True, artist, album_name, cover_url)
     
-    # ============ PAGE: CONCERTS ============
-    elif page == "🎸 Concerts":
-        st.subheader("🎸 Concerts")
+    # ============ PAGE: GIGS ============
+    elif page == "🎸 Gigs":
+        st.subheader("🎸 Gigs")
         delete_past_concerts()
         
         col1, col2 = st.columns([3, 1])
         with col1:
             st.write("Upcoming metal events")
         with col2:
-            if st.button("➕ New Concert"):
-                st.session_state.show_concert_form = not st.session_state.show_concert_form
+            # Only show New Concert button if user is logged in
+            if st.session_state.current_user:
+                if st.button("➕ New Concert", use_container_width=True):
+                    st.session_state.show_concert_form = not st.session_state.show_concert_form
+            else:
+                st.button("➕ New Concert", disabled=True, use_container_width=True,
+                         help="Login to add concerts")
         
-        if st.session_state.show_concert_form:
-            with st.form("concert_form"):
+        if st.session_state.show_concert_form and st.session_state.current_user:
+            with st.form("concert_form", clear_on_submit=True):
                 bands = st.text_input("Bands", placeholder="Separate with commas")
                 date = st.date_input("Date")
                 venue = st.text_input("Venue")
@@ -727,7 +1453,7 @@ def main():
                     if bands and venue and city:
                         tags = process_tags(tags_input)
                         if save_concert(st.session_state.current_user, bands, date, venue, city, tags, info):
-                            st.success("✅ Concert added!")
+                            show_success_message("✅ Concert added successfully!")
                             st.session_state.show_concert_form = False
                             st.rerun()
                         else:
@@ -747,6 +1473,17 @@ def main():
     # ============ PAGE: RANKING ============
     elif page == "🏆 Ranking":
         st.subheader("🏆 Album Ranking")
+        
+        # Show guest notice if not logged in
+        if not st.session_state.current_user:
+            st.markdown("""
+            <div class="guest-notice">
+            👀 You're browsing as a guest. You can view rankings but need to 
+            <strong><a href="#" onclick="window.location.href='?show_login=true'">login</a></strong> 
+            to like albums.
+            </div>
+            """, unsafe_allow_html=True)
+        
         albums = load_albums()
         albums_sorted = sorted(albums, key=lambda x: len(x.get('likes', [])), reverse=True)
         
@@ -755,7 +1492,7 @@ def main():
             with col1:
                 st.info(f"🔍 Filtered by: **#{st.session_state.active_filter_ranking}**")
             with col2:
-                if st.button("✖️ Clear filter", key="clear_ranking_filter"):
+                if st.button("✖️ Clear filter", key="clear_ranking_filter", use_container_width=True):
                     st.session_state.active_filter_ranking = None
                     st.rerun()
         
@@ -771,28 +1508,76 @@ def main():
     
     # ============ PAGE: PROFILE ============
     elif page == "👤 Profile":
-        st.subheader("👤 My Profile")
-        albums = load_albums()
-        concerts = load_concerts()
-        my_albums = [a for a in albums if a['username'] == st.session_state.current_user]
-        my_concerts = [c for c in concerts if c['username'] == st.session_state.current_user]
+        st.subheader("👤 Profile")
         
-        # Removed the user stats section (the three columns with metrics)
-        
-        st.divider()
-        
-        if my_albums or my_concerts:
+        if not st.session_state.current_user:
+            st.info("""
+            👤 **Your Profile**
+            
+            Login to see your profile, including:
+            - Albums you've shared
+            - Concerts you've added
+            - Albums you've liked
+            - Your activity stats
+            
+            Use the login form in the sidebar to get started.
+            """)
+        else:
+            albums = load_albums()
+            concerts = load_concerts()
+            my_albums = [a for a in albums if a['username'] == st.session_state.current_user]
+            my_concerts = [c for c in concerts if c['username'] == st.session_state.current_user]
+            
+            # Get liked albums
+            liked_albums = [a for a in albums if st.session_state.current_user in a.get('likes', [])]
+            
+            # REMOVED: liked_concerts counter
+            # liked_concerts = [c for c in concerts if st.session_state.current_user in c.get('likes', [])]
+            
+            # Show counts - MODIFIED: Only show 3 metrics now
+            col1, col2, col3 = st.columns(3)  # Changed from 4 to 3 columns
+            with col1:
+                st.metric("🎵 My Albums", len(my_albums))
+            with col2:
+                st.metric("🎸 My Gigs", len(my_concerts))
+            with col3:
+                st.metric("❤️ Liked Albums", len(liked_albums))
+            # REMOVED: "Liked Gigs" counter
+            
+            st.divider()
+            
             if my_albums:
                 st.write("### 🎵 My Albums")
                 for album in my_albums:
                     display_album_post(album)
             
+            if liked_albums:
+                st.write("### ❤️ Liked Albums")
+                for album in liked_albums:
+                    display_album_post(album)
+            
             if my_concerts:
-                st.write("### 🎸 My Concerts")
+                st.write("### 🎸 My Gigs")
                 for concert in my_concerts:
                     display_concert_post(concert)
+            
+            # REMOVED: "Liked Gigs" section
+            # if liked_concerts:
+            #     st.write("### 🤘 Liked Gigs")
+            #     for concert in liked_concerts:
+            #         display_concert_post(concert)
+            
+            if not my_albums and not my_concerts and not liked_albums:  # Removed: and not liked_concerts
+                st.info("📭 You haven't shared or liked anything yet")
+    
+    # ============ PAGE: ADMIN TOOLS ============
+    elif page == "🔧 Admin Tools":
+        if st.session_state.current_user == "Admin":
+            admin_backup_page()
         else:
-            st.info("📭 You haven't shared anything yet")
+            st.error("⛔ Access Denied")
+            st.warning("Only Admin users can access this section.")
+            st.info("Please login with Admin credentials to access database tools.")
 
 # ===========================
 # RUN APP

@@ -1,10 +1,9 @@
 # ===========================
-# THE METAL WALL - STREAMLIT APP v0.3
+# THE METAL WALL - STREAMLIT APP v0.4
 # ===========================
-# NEW: Session persistence with browser localStorage
-# NEW: Confirmation pop-ups and form reset
-# NEW: Guest browsing without login
-# NEW: Admin database backup/restore tools
+# NEW: Integrated New Post button in Records section
+# NEW: Timeline and Votes sorting options in Records
+# REMOVED: Separate Ranking page
 
 import streamlit as st
 import sqlite3
@@ -66,6 +65,19 @@ st.markdown("""
         border-radius: 8px;
         border: 1px solid #4a4a6a;
         margin: 10px 0;
+    }
+    .sort-option {
+        padding: 8px 12px;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+    .sort-option:hover {
+        background-color: #2a2a4a;
+    }
+    .sort-option.active {
+        background-color: #4299e1;
+        color: white;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -284,7 +296,7 @@ def export_database_to_json():
         
         export_data = {
             'export_date': datetime.now().isoformat(),
-            'app_version': 'MetalWall v0.3',
+            'app_version': 'MetalWall v0.4',
             'albums_count': len(albums),
             'concerts_count': len(concerts),
             'albums': albums,
@@ -612,8 +624,6 @@ if 'show_concert_form' not in st.session_state:
     st.session_state.show_concert_form = False
 if 'active_filter_feed' not in st.session_state:
     st.session_state.active_filter_feed = None
-if 'active_filter_ranking' not in st.session_state:
-    st.session_state.active_filter_ranking = None
 if 'active_filter_concerts' not in st.session_state:
     st.session_state.active_filter_concerts = None
 if 'show_manual_input' not in st.session_state:
@@ -628,6 +638,8 @@ if 'form_submitted' not in st.session_state:
     st.session_state.form_submitted = False
 if 'success_message' not in st.session_state:
     st.session_state.success_message = ""
+if 'sort_option' not in st.session_state:
+    st.session_state.sort_option = "Timeline"  # Default: Timeline, Options: Timeline, Votes
 
 # Try to load session from storage
 if st.session_state.current_user is None:
@@ -765,7 +777,7 @@ def update_concert(concert_id, bands, date, venue, city, tags, info):
 # UI COMPONENTS
 # ===========================
 
-def display_album_post(album):
+def display_album_post(album, show_rank=False, rank=None):
     """Display an album post like Twitter/Mastodon with edit functionality"""
     cover_url = album.get('cover_url', '')
     username = album.get('username', 'Unknown')
@@ -838,6 +850,8 @@ def display_album_post(album):
     with col1:
         st.markdown(cover_html, unsafe_allow_html=True)
     with col2:
+        if show_rank and rank is not None:
+            st.markdown(f"**#{rank}**")
         st.markdown(f'**{artist}**', unsafe_allow_html=True)
         st.markdown(f'{album_name}', unsafe_allow_html=True)
         st.caption(f'📱 {platform} • {get_time_ago(timestamp)} • @{username}')
@@ -924,7 +938,6 @@ def display_album_post(album):
                             st.rerun()
     
     st.divider()
-
 
 def display_concert_post(concert):
     """Display a concert post with edit functionality"""
@@ -1062,6 +1075,8 @@ def handle_album_submission(url, tags_input, is_manual=False, artist="", album_n
                 tags
             ):
                 show_success_message("✅ Album shared successfully!")
+                st.session_state.show_album_form = False
+                st.rerun()
                 return True
             else:
                 st.error("❌ Error saving")
@@ -1085,6 +1100,8 @@ def handle_album_submission(url, tags_input, is_manual=False, artist="", album_n
                         tags
                     ):
                         show_success_message("✅ Album shared successfully!")
+                        st.session_state.show_album_form = False
+                        st.rerun()
                         return True
                     else:
                         st.error("❌ Error saving")
@@ -1320,11 +1337,11 @@ def main():
         st.divider()
         
         # ============ Navigation ============
-        # Admin gets extra navigation option
+        # Updated navigation options - removed "New Post" and "Ranking"
         if st.session_state.current_user == "Admin":
-            nav_options = ["💿 Records", "🎵 New Post", "🎸 Gigs", "🏆 Ranking", "👤 Profile", "🔧 Admin Tools"]
+            nav_options = ["💿 Records", "🎸 Gigs", "👤 Profile", "🔧 Admin Tools"]
         else:
-            nav_options = ["💿 Records", "🎵 New Post", "🎸 Gigs", "🏆 Ranking", "👤 Profile"]
+            nav_options = ["💿 Records", "🎸 Gigs", "👤 Profile"]
         
         page = st.sidebar.radio(
             "📱 Navigation",
@@ -1333,11 +1350,11 @@ def main():
         )
         
         st.sidebar.divider()
-        st.sidebar.markdown("\\m/ MetalWall v0.3")
+        st.sidebar.markdown("\\m/ MetalWall v0.4")
         if st.session_state.current_user:
             st.sidebar.caption("Session persistence enabled")
     
-    # ============ PAGE: RECORDS ============
+    # ============ PAGE: RECORDS (with New Post integration and Sorting) ============
     if page == "💿 Records":
         st.subheader("💿 Records Wall")
         
@@ -1351,40 +1368,46 @@ def main():
             </div>
             """, unsafe_allow_html=True)
         
-        albums = load_albums()
+        # Top bar with New Post button and Sorting options
+        col_top1, col_top2, col_top3 = st.columns([3, 2, 1])
         
-        if st.session_state.active_filter_feed:
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.info(f"🔍 Filtered by: **#{st.session_state.active_filter_feed}**")
-            with col2:
-                if st.button("✖️ Clear filter", key="clear_feed_filter", use_container_width=True):
-                    st.session_state.active_filter_feed = None
+        with col_top1:
+            # Sorting options
+            st.markdown("**Sort by:**")
+        
+        with col_top2:
+            # Radio buttons for sorting
+            sort_col1, sort_col2 = st.columns(2)
+            with sort_col1:
+                if st.button("📅 Timeline", 
+                           key="sort_timeline",
+                           use_container_width=True,
+                           type="primary" if st.session_state.sort_option == "Timeline" else "secondary"):
+                    st.session_state.sort_option = "Timeline"
+                    st.rerun()
+            with sort_col2:
+                if st.button("👍 Votes", 
+                           key="sort_votes",
+                           use_container_width=True,
+                           type="primary" if st.session_state.sort_option == "Votes" else "secondary"):
+                    st.session_state.sort_option = "Votes"
                     st.rerun()
         
-        if st.session_state.active_filter_feed:
-            albums = [a for a in albums if st.session_state.active_filter_feed.lower() in [t.lower() for t in a.get('tags', [])]]
+        with col_top3:
+            # Only show New Post button if user is logged in
+            if st.session_state.current_user:
+                if st.button("➕ New Post", key="new_post_button", use_container_width=True):
+                    st.session_state.show_album_form = not st.session_state.show_album_form
+                    st.rerun()
+            else:
+                st.button("➕ New Post", disabled=True, use_container_width=True,
+                         help="Login to post albums")
         
-        if not albums:
-            st.info("📭 No albums with this tag")
-        else:
-            for album in albums:
-                display_album_post(album)
-    
-    # ============ PAGE: NEW POST ============
-    elif page == "🎵 New Post":
-        st.subheader("🎵 New Post")
-        
-        # Check if user is logged in
-        if not st.session_state.current_user:
-            st.warning("""
-            🔒 **Login Required**
+        # Show album form if toggled and user is logged in
+        if st.session_state.show_album_form and st.session_state.current_user:
+            st.markdown("---")
+            st.subheader("🎵 New Album Post")
             
-            You need to login to share albums. 
-            
-            Please use the login form in the sidebar or click the Login button in the header.
-            """)
-        else:
             # Show success message if form was just submitted
             if st.session_state.get('form_submitted'):
                 st.success(st.session_state.success_message)
@@ -1421,6 +1444,41 @@ def main():
                     
                     if submitted_manual:
                         handle_album_submission(url, tags_input, True, artist, album_name, cover_url)
+            
+            st.markdown("---")
+        
+        # Load and display albums with sorting
+        albums = load_albums()
+        
+        # Apply sorting
+        if st.session_state.sort_option == "Votes":
+            albums = sorted(albums, key=lambda x: len(x.get('likes', [])), reverse=True)
+            show_rank = True
+        else:
+            # Timeline is the default (already sorted by timestamp in load_albums)
+            show_rank = False
+        
+        # Apply tag filter if active
+        if st.session_state.active_filter_feed:
+            col_filter1, col_filter2 = st.columns([3, 1])
+            with col_filter1:
+                st.info(f"🔍 Filtered by: **#{st.session_state.active_filter_feed}**")
+            with col_filter2:
+                if st.button("✖️ Clear filter", key="clear_feed_filter", use_container_width=True):
+                    st.session_state.active_filter_feed = None
+                    st.rerun()
+        
+        if st.session_state.active_filter_feed:
+            albums = [a for a in albums if st.session_state.active_filter_feed.lower() in [t.lower() for t in a.get('tags', [])]]
+        
+        if not albums:
+            st.info("📭 No albums to display")
+        else:
+            for idx, album in enumerate(albums, 1):
+                if show_rank:
+                    display_album_post(album, show_rank=True, rank=idx)
+                else:
+                    display_album_post(album)
     
     # ============ PAGE: GIGS ============
     elif page == "🎸 Gigs":
@@ -1470,42 +1528,6 @@ def main():
             for concert in concerts:
                 display_concert_post(concert)
     
-    # ============ PAGE: RANKING ============
-    elif page == "🏆 Ranking":
-        st.subheader("🏆 Album Ranking")
-        
-        # Show guest notice if not logged in
-        if not st.session_state.current_user:
-            st.markdown("""
-            <div class="guest-notice">
-            👀 You're browsing as a guest. You can view rankings but need to 
-            <strong><a href="#" onclick="window.location.href='?show_login=true'">login</a></strong> 
-            to like albums.
-            </div>
-            """, unsafe_allow_html=True)
-        
-        albums = load_albums()
-        albums_sorted = sorted(albums, key=lambda x: len(x.get('likes', [])), reverse=True)
-        
-        if st.session_state.active_filter_ranking:
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.info(f"🔍 Filtered by: **#{st.session_state.active_filter_ranking}**")
-            with col2:
-                if st.button("✖️ Clear filter", key="clear_ranking_filter", use_container_width=True):
-                    st.session_state.active_filter_ranking = None
-                    st.rerun()
-        
-        if st.session_state.active_filter_ranking:
-            albums_sorted = [a for a in albums_sorted if st.session_state.active_filter_ranking.lower() in [t.lower() for t in a.get('tags', [])]]
-        
-        if not albums_sorted:
-            st.info("📭 No albums with this tag")
-        else:
-            for idx, album in enumerate(albums_sorted, 1):
-                st.write(f"**#{idx}**")
-                display_album_post(album)
-    
     # ============ PAGE: PROFILE ============
     elif page == "👤 Profile":
         st.subheader("👤 Profile")
@@ -1531,18 +1553,14 @@ def main():
             # Get liked albums
             liked_albums = [a for a in albums if st.session_state.current_user in a.get('likes', [])]
             
-            # REMOVED: liked_concerts counter
-            # liked_concerts = [c for c in concerts if st.session_state.current_user in c.get('likes', [])]
-            
-            # Show counts - MODIFIED: Only show 3 metrics now
-            col1, col2, col3 = st.columns(3)  # Changed from 4 to 3 columns
+            # Show counts - Only show 3 metrics now
+            col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("🎵 My Albums", len(my_albums))
             with col2:
                 st.metric("🎸 My Gigs", len(my_concerts))
             with col3:
                 st.metric("❤️ Liked Albums", len(liked_albums))
-            # REMOVED: "Liked Gigs" counter
             
             st.divider()
             
@@ -1561,13 +1579,7 @@ def main():
                 for concert in my_concerts:
                     display_concert_post(concert)
             
-            # REMOVED: "Liked Gigs" section
-            # if liked_concerts:
-            #     st.write("### 🤘 Liked Gigs")
-            #     for concert in liked_concerts:
-            #         display_concert_post(concert)
-            
-            if not my_albums and not my_concerts and not liked_albums:  # Removed: and not liked_concerts
+            if not my_albums and not my_concerts and not liked_albums:
                 st.info("📭 You haven't shared or liked anything yet")
     
     # ============ PAGE: ADMIN TOOLS ============

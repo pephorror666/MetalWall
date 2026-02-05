@@ -344,11 +344,12 @@ def random_album_page():
         st.markdown("<div class='random-album-card'>", unsafe_allow_html=True)
         
         discovery = discovery_data['discovery']
+        new_url = discovery['url']
         col_img, col_info = st.columns([1, 2])
         
         with col_img:
             if discovery.get('image'):
-                st.markdown("<a href='{discovery['url']}' target='_blank'>")
+                st.markdown("<a href='{new_url}' target='_blank'>")
                 st.image(discovery['image'])
                 st.markdown("</a>")
             else:

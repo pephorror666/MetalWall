@@ -348,7 +348,9 @@ def random_album_page():
         
         with col_img:
             if discovery.get('image'):
+                st.markdown("<a href='{discovery['url']}' target='_blank'>")
                 st.image(discovery['image'])
+                st.markdown("</a>")
             else:
                 st.markdown("""
                 <div style="width:100%; height:200px; background:#333; 

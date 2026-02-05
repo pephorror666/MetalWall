@@ -377,31 +377,25 @@ def random_album_page():
                 col_actions = st.columns([1, 1, 1, 1])
             else:
                 col_actions = st.columns([1, 1, 1])
-            
+
             col_idx = 0
-            
+
+            # Use st.link_button() instead of st.button() with webbrowser
             with col_actions[col_idx]:
-                if st.button("🎵 Open in Spotify", 
-                           use_container_width=True,
-                           key="open_spotify"):
-                    webbrowser.open_new_tab(discovery['url'])
-                    #webbrowser.open(discovery['url'],new=2)
+                st.link_button("🎵 Open in Spotify", discovery['url'], use_container_width=True)
             col_idx += 1
-            
+
             # Add Bandcamp button if available
             if discovery_data.get('bandcamp'):
                 with col_actions[col_idx]:
-                    if st.button("🎶 Open in Bandcamp", 
-                               use_container_width=True,
-                               key="open_bandcamp"):
-                        webbrowser.open_new_tab(discovery_data['bandcamp']['url'])
-                        #webbrowser.open(discovery_data['bandcamp']['url'],new=2)
+                    st.link_button("🎶 Open in Bandcamp", discovery_data['bandcamp']['url'], use_container_width=True)
                 col_idx += 1
-            
+
+            # Keep the other buttons as they are (internal actions)
             with col_actions[col_idx]:
                 if st.button("🔁 Discover Another", 
-                           use_container_width=True,
-                           key="discover_another"):
+                        use_container_width=True,
+                        key="discover_another"):
                     # Reuse the same base artist for new discovery
                     origin = discovery_data['origin']
                     new_discovery, error = discover_random_album(
@@ -414,11 +408,11 @@ def random_album_page():
                         st.session_state.random_discovery_data = new_discovery
                     st.rerun()
             col_idx += 1
-            
+
             with col_actions[col_idx]:
                 if st.button("📤 Post to Wall", 
-                           use_container_width=True,
-                           key="post_to_wall"):
+                        use_container_width=True,
+                        key="post_to_wall"):
                     if st.session_state.current_user:
                         # Use the automatic post option with Spotify URL
                         url = discovery['url']

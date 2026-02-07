@@ -147,6 +147,9 @@ def render_album_form():
 def handle_album_submission(url: str, tags_input: str, is_manual: bool = False, 
                            artist: str = "", album_name: str = "", cover_url: str = ""):
     """Handle album form submission"""
+    # Cover handeling
+    if cover_url == "":
+        cover_url = "https://upload.wikimedia.org/wikipedia/commons/3/3c/No-album-art.png"
     # Check for duplicate URL
     if check_duplicate_url(url):
         st.error("❌ This URL has already been posted. Please share a different album.")
@@ -304,12 +307,6 @@ def random_album_page():
     # Introduction
     st.markdown("""
     **Discover new music based on the albums in the wall!**
-    
-    This feature:
-    1. 🎯 Picks a random album from the wall
-    2. 🔗 Finds artists related to that album's artist
-    3. 🎸 Picks a random related artist
-    4. 🎵 Shows you a random album from that artist
     """)
     
     st.divider()
@@ -344,13 +341,10 @@ def random_album_page():
         st.markdown("<div class='random-album-card'>", unsafe_allow_html=True)
         
         discovery = discovery_data['discovery']
-        new_url = discovery['url']
-        new_cover = discovery['image']
         col_img, col_info = st.columns([1, 2])
         
         with col_img:
             if discovery.get('image'):
-                #st.markdown("<a href='{new_url}' target='_blank'><img src='{new_cover}' class='clickable-image' style='width:100%; height:100%;'></a>")
                 st.image(discovery['image'])
             else:
                 st.markdown("""
@@ -380,25 +374,24 @@ def random_album_page():
                 col_actions = st.columns([1, 1, 1, 1])
             else:
                 col_actions = st.columns([1, 1, 1])
-
+            
             col_idx = 0
-
-            # Use st.link_button() instead of st.button() with webbrowser
+            
             with col_actions[col_idx]:
-                st.link_button("🎵 Open in Spotify", discovery['url'], use_container_width=True)
+                with col_actions[col_idx]:
+                    st.link_button("🎵 Open in Spotify", discovery['url'], use_container_width=True)
             col_idx += 1
-
+            
             # Add Bandcamp button if available
             if discovery_data.get('bandcamp'):
                 with col_actions[col_idx]:
                     st.link_button("🎶 Open in Bandcamp", discovery_data['bandcamp']['url'], use_container_width=True)
                 col_idx += 1
-
-            # Keep the other buttons as they are (internal actions)
+            
             with col_actions[col_idx]:
                 if st.button("🔁 Discover Another", 
-                        use_container_width=True,
-                        key="discover_another"):
+                           use_container_width=True,
+                           key="discover_another"):
                     # Reuse the same base artist for new discovery
                     origin = discovery_data['origin']
                     new_discovery, error = discover_random_album(
@@ -411,11 +404,11 @@ def random_album_page():
                         st.session_state.random_discovery_data = new_discovery
                     st.rerun()
             col_idx += 1
-
+            
             with col_actions[col_idx]:
                 if st.button("📤 Post to Wall", 
-                        use_container_width=True,
-                        key="post_to_wall"):
+                           use_container_width=True,
+                           key="post_to_wall"):
                     if st.session_state.current_user:
                         # Use the automatic post option with Spotify URL
                         url = discovery['url']
@@ -425,6 +418,7 @@ def random_album_page():
                         success = handle_album_submission(url, tags_input, is_manual=False)
                         if success:
                             st.success("✅ Album posted to wall!")
+                            show_success_message("✅ Album posted successfully!")
                         else:
                             st.error("❌ Failed to post to wall")
                     else:

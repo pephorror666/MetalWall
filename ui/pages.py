@@ -369,6 +369,14 @@ def random_album_page():
             if discovery.get('genres'):
                 st.write(f"**Genres:** {', '.join(discovery['genres'][:3])}")
             
+            # Display tags if available
+            if discovery_data.get('tags'):
+                st.write("**Tags:**")
+                tag_cols = st.columns(5)
+                for idx, tag in enumerate(discovery_data['tags'][:5]):  # Show up to 5 tags
+                    with tag_cols[idx % 5]:
+                        st.markdown(f"`#{tag}`")
+            
             # Action buttons
             if discovery_data.get('bandcamp'):
                 col_actions = st.columns([1, 1, 1, 1])
@@ -378,8 +386,7 @@ def random_album_page():
             col_idx = 0
             
             with col_actions[col_idx]:
-                with col_actions[col_idx]:
-                    st.link_button("🎵 Open in Spotify", discovery['url'], use_container_width=True)
+                st.link_button("🎵 Open in Spotify", discovery['url'], use_container_width=True)
             col_idx += 1
             
             # Add Bandcamp button if available
@@ -412,7 +419,13 @@ def random_album_page():
                     if st.session_state.current_user:
                         # Use the automatic post option with Spotify URL
                         url = discovery['url']
-                        tags_input = "#randomdiscovery"
+                        
+                        # NEW: Use the tags from the discovery data
+                        if discovery_data.get('tags'):
+                            # Format tags as string with # prefix
+                            tags_input = ' '.join([f"#{tag}" for tag in discovery_data['tags']])
+                        else:
+                            tags_input = "#randomdiscovery"
                         
                         # Call the handle_album_submission function
                         success = handle_album_submission(url, tags_input, is_manual=False)

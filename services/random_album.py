@@ -67,8 +67,8 @@ def is_metal_artist(lastfm_client, artist_name: str) -> bool:
         ]
         
         # Also check for partial matches (e.g., "death" in "death metal")
-        partial_keywords = ['metal', 'grindcore', 'gore', 'death', 'black', 'thrash', 
-                           'power', 'heavy', 'doom', 'core', 'sludge', 'stoner']
+        partial_keywords = ['metal', 'grindcore', 'gore', 'death', 'thrash', 
+                           'heavy', 'sludge', 'stoner']
         
         # Check if any metal keyword is in the tags
         for tag in tag_names:

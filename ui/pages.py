@@ -413,21 +413,53 @@ def random_album_page():
                     st.rerun()
             col_idx += 1
             
+            # In the random_album_page function, update the "Post to Wall" button section:
+
             with col_actions[col_idx]:
-                if st.button("📤 Post to Wall", use_container_width=True, key="post_to_wall"):
+                if st.button("📤 Post to Wall", 
+                        use_container_width=True,
+                        key="post_to_wall"):
                     if st.session_state.current_user:
                         # Use the automatic post option with Spotify URL
                         url = discovery['url']
                         artist_tags = discovery_data.get("artist_tags", [])
+                        
+                        # Debug: Show what tags we're getting
+                        st.write(f"Debug: Raw artist tags from Last.fm: {artist_tags}")
+                        
                         if artist_tags:
-                            # Ensure tags are properly formatted without spaces
-                            tags_input = " ".join(f"#{tag.replace(' ', '').lower()}" for tag in artist_tags)
+                            # Ensure tags are properly formatted
+                            clean_tags = []
+                            for tag in artist_tags:
+                                if isinstance(tag, str):
+                                    # Clean the tag
+                                    tag_clean = tag.lower().strip()
+                                    # Replace spaces with hyphens
+                                    tag_clean = tag_clean.replace(' ', '-')
+                                    # Remove any remaining special characters except hyphens
+                                    tag_clean = ''.join(c for c in tag_clean if c.isalnum() or c == '-')
+                                    if tag_clean:
+                                        clean_tags.append(tag_clean)
+                            
+                            st.write(f"Debug: Cleaned tags: {clean_tags}")
+                            
+                            if clean_tags:
+                                # Take up to 5 tags
+                                selected_tags = clean_tags[:5]
+                                tags_input = " ".join(f"#{tag}" for tag in selected_tags)
+                                st.write(f"Debug: Final tags input: {tags_input}")
+                            else:
+                                tags_input = "#randomdiscovery"
                         else:
                             tags_input = "#randomdiscovery"
+                            st.write(f"Debug: No artist tags found, using default")
                         
                         success = handle_album_submission(url, tags_input, is_manual=False)
                         if success:
                             st.success("✅ Album posted to wall!")
+                            # Clear the discovery data to show fresh state
+                            st.session_state.random_discovery_data = None
+                            st.rerun()
                         else:
                             st.error("❌ Failed to post to wall")
                     else:

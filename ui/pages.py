@@ -266,24 +266,42 @@ def render_concert_form():
     """Render concert posting form"""
     with st.form("concert_form", clear_on_submit=True):
         bands = st.text_input("Bands", placeholder="Separate with commas")
-        date = st.date_input("Date")
+        
+        # CAMBIO: Streamlit permite seleccionar rangos si el usuario hace clic en dos fechas.
+        # El 'value' puede ser una fecha sola o una tupla/lista de dos fechas.
+        date_selection = st.date_input("Date (Select two dates for a Festival range)")
+        
         venue = st.text_input("Venue")
         city = st.text_input("City")
         tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #liveshow")
         info = st.text_area("Additional info", placeholder="Tickets, prices, etc.")
         submitted = st.form_submit_button("✅ Save Concert", use_container_width=True)
-        
+
         if submitted:
-            if bands and venue and city:
+            if bands and venue and city and date_selection:
+                # --- LÓGICA PARA RANGOS DE FESTIVAL ---
+                if isinstance(date_selection, (list, tuple)):
+                    if len(date_selection) == 2:
+                        # Si seleccionó un rango (Inicio y Fin)
+                        final_date_str = f"{date_selection[0]} | {date_selection[1]}"
+                    else:
+                        # Si solo hizo clic en una fecha pero el widget está en modo rango
+                        final_date_str = str(date_selection[0])
+                else:
+                    # Si por alguna razón devuelve un objeto de fecha único
+                    final_date_str = str(date_selection)
+                # ---------------------------------------
+
                 tags = process_tags(tags_input)
-                if save_concert(st.session_state.current_user, bands, date, venue, city, tags, info):
+                # IMPORTANTE: Pasamos final_date_str en lugar de date
+                if save_concert(st.session_state.current_user, bands, final_date_str, venue, city, tags, info):
                     show_success_message("✅ Concert added successfully!")
                     st.session_state.show_concert_form = False
                     st.rerun()
                 else:
                     st.error("❌ Error saving")
             else:
-                st.warning("⚠️ Please complete all required fields")
+                st.warning("⚠️ Please complete all required fields (including date)")
 
 def render_concerts_list():
     """Load and display concerts"""

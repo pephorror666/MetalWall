@@ -37,26 +37,17 @@ def get_time_ago(timestamp: datetime) -> str:
         return f"{days} day{'s' if days > 1 else ''} ago"
 
 def format_date_display(date_str: str) -> str:
-    """Detecta si es una fecha única o un rango y lo formatea."""
+    """Convert YYYY-MM-DD to DD/MM/YYYY"""
     try:
-        if " | " in date_str:
-            start, end = date_str.split(" | ")
-            d1 = datetime.strptime(start, '%Y-%m-%d').strftime('%d/%m/%Y')
-            d2 = datetime.strptime(end, '%Y-%m-%d').strftime('%d/%m/%Y')
-            return f"🗓️ {d1} - {d2}"
-        
         date_obj = datetime.strptime(date_str, '%Y-%m-%d')
         return date_obj.strftime('%d/%m/%Y')
     except:
         return date_str
 
 def get_days_until(date_str: str) -> int:
-    """Calcula días hasta el concierto (si es rango, usa la fecha de inicio)."""
+    """Calculate days until concert"""
     try:
-        # Si es un festival, tomamos la primera fecha
-        actual_date = date_str.split(" | ")[0] if " | " in date_str else date_str
-        
-        concert_date = datetime.strptime(actual_date, '%Y-%m-%d')
+        concert_date = datetime.strptime(date_str, '%Y-%m-%d')
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         concert_date = concert_date.replace(hour=0, minute=0, second=0, microsecond=0)
         return (concert_date - today).days

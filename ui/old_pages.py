@@ -297,6 +297,9 @@ def render_concerts_list():
 
 # ============ RANDOM ALBUM PAGE ============
 
+# File: metalwall_app/ui/pages.py
+# Update the random_album_page function
+
 def random_album_page():
     """Random Album discovery page"""
     st.subheader("🎲 Random Album Discovery")
@@ -304,12 +307,6 @@ def random_album_page():
     # Introduction
     st.markdown("""
     **Discover new music based on the albums in the wall!**
-    
-    This feature:
-    1. 🎯 Picks a random album from the wall
-    2. 🔗 Finds artists related to that album's artist
-    3. 🎸 Picks a random related artist
-    4. 🎵 Shows you a random album from that artist
     """)
     
     st.divider()
@@ -372,6 +369,14 @@ def random_album_page():
             if discovery.get('genres'):
                 st.write(f"**Genres:** {', '.join(discovery['genres'][:3])}")
             
+            # Display tags if available
+            if discovery_data.get('tags'):
+                st.write("**Tags:**")
+                tag_cols = st.columns(5)
+                for idx, tag in enumerate(discovery_data['tags'][:5]):  # Show up to 5 tags
+                    with tag_cols[idx % 5]:
+                        st.markdown(f"`#{tag}`")
+            
             # Action buttons
             if discovery_data.get('bandcamp'):
                 col_actions = st.columns([1, 1, 1, 1])
@@ -381,19 +386,13 @@ def random_album_page():
             col_idx = 0
             
             with col_actions[col_idx]:
-                if st.button("🎵 Open in Spotify", 
-                           use_container_width=True,
-                           key="open_spotify"):
-                    webbrowser.open_new_tab(discovery['url'])
+                st.link_button("🎵 Open in Spotify", discovery['url'], use_container_width=True)
             col_idx += 1
             
             # Add Bandcamp button if available
             if discovery_data.get('bandcamp'):
                 with col_actions[col_idx]:
-                    if st.button("🎶 Open in Bandcamp", 
-                               use_container_width=True,
-                               key="open_bandcamp"):
-                        webbrowser.open_new_tab(discovery_data['bandcamp']['url'])
+                    st.link_button("🎶 Open in Bandcamp", discovery_data['bandcamp']['url'], use_container_width=True)
                 col_idx += 1
             
             with col_actions[col_idx]:
@@ -420,12 +419,19 @@ def random_album_page():
                     if st.session_state.current_user:
                         # Use the automatic post option with Spotify URL
                         url = discovery['url']
-                        tags_input = "#randomdiscovery"
+                        
+                        # NEW: Use the tags from the discovery data
+                        if discovery_data.get('tags'):
+                            # Format tags as string with # prefix
+                            tags_input = ' '.join([f"#{tag}" for tag in discovery_data['tags']])
+                        else:
+                            tags_input = "#randomdiscovery"
                         
                         # Call the handle_album_submission function
                         success = handle_album_submission(url, tags_input, is_manual=False)
                         if success:
                             st.success("✅ Album posted to wall!")
+                            show_success_message("✅ Album posted successfully!")
                         else:
                             st.error("❌ Failed to post to wall")
                     else:

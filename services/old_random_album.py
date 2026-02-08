@@ -319,7 +319,6 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                     continue
             else:
                 # No Last.fm client, can't validate - just return what we have
-                artist_tags = []
                 bandcamp_result = None
                 try:
                     if random_album_data:

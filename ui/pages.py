@@ -414,18 +414,17 @@ def random_album_page():
             col_idx += 1
             
             with col_actions[col_idx]:
-                if st.button("📤 Post to Wall", 
-                           use_container_width=True,
-                           key="post_to_wall"):
+                if st.button("📤 Post to Wall", use_container_width=True, key="post_to_wall"):
                     if st.session_state.current_user:
                         # Use the automatic post option with Spotify URL
                         url = discovery['url']
                         artist_tags = discovery_data.get("artist_tags", [])
                         if artist_tags:
-                            tags_input = " ".join(f"#{t}" for t in artist_tags)
+                            # Ensure tags are properly formatted without spaces
+                            tags_input = " ".join(f"#{tag.replace(' ', '').lower()}" for tag in artist_tags)
                         else:
                             tags_input = "#randomdiscovery"
-
+                        
                         success = handle_album_submission(url, tags_input, is_manual=False)
                         if success:
                             st.success("✅ Album posted to wall!")

@@ -340,6 +340,7 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                     },
                     "discovery": random_album_data,
                     "bandcamp": bandcamp_result,
+                    "artist_tags": artist_tags,
                     "description": f"Based on '{base_album_name}' by {base_artist_name} → Related artist: {random_artist}",
                     "validation": "⚠️ Could not validate (Last.fm not available)"
                 }

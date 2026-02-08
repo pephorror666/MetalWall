@@ -276,7 +276,7 @@ def render_concert_form():
 #########################
         # --- Dentro del formulario de añadir concierto ---
         # Permitimos selección de rango con is_range=True
-        date_range = st.date_input("Date", value=datetime.today())
+        date_range = st.date_input("Date")
 
         # Procesamos la selección antes de guardar
         if isinstance(date_range, (list, tuple)):

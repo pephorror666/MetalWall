@@ -424,9 +424,6 @@ def random_album_page():
                         url = discovery['url']
                         artist_tags = discovery_data.get("artist_tags", [])
                         
-                        # Debug: Show what tags we're getting
-                        st.write(f"Debug: Raw artist tags from Last.fm: {artist_tags}")
-                        
                         if artist_tags:
                             # Ensure tags are properly formatted
                             clean_tags = []
@@ -441,18 +438,14 @@ def random_album_page():
                                     if tag_clean:
                                         clean_tags.append(tag_clean)
                             
-                            st.write(f"Debug: Cleaned tags: {clean_tags}")
-                            
                             if clean_tags:
                                 # Take up to 5 tags
                                 selected_tags = clean_tags[:5]
                                 tags_input = " ".join(f"#{tag}" for tag in selected_tags)
-                                st.write(f"Debug: Final tags input: {tags_input}")
                             else:
                                 tags_input = "#randomdiscovery"
                         else:
                             tags_input = "#randomdiscovery"
-                            st.write(f"Debug: No artist tags found, using default")
                         
                         success = handle_album_submission(url, tags_input, is_manual=False)
                         if success:

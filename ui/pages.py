@@ -263,27 +263,48 @@ def gigs_page():
     render_concerts_list()
 
 def render_concert_form():
-    """Render concert posting form"""
+    """Render concert posting form con soporte para festivales"""
     with st.form("concert_form", clear_on_submit=True):
-        bands = st.text_input("Bands", placeholder="Separate with commas")
-        date = st.date_input("Date")
+        bands = st.text_input("Bands", placeholder="Separate with commas (e.g. Iron Maiden, Slayer)")
+        
+        # El cambio clave: date_input puede recibir una tupla para habilitar rangos
+        date_selection = st.date_input(
+            "Date", 
+            value=(datetime.now()), 
+            help="Click once for a single day, or select two dates for a festival range."
+        )
+        
         venue = st.text_input("Venue")
         city = st.text_input("City")
         tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #liveshow")
-        info = st.text_area("Additional info", placeholder="Tickets, prices, etc.")
+        info = st.text_area("Additional info", placeholder="Tickets, prices, full lineup...")
+        
         submitted = st.form_submit_button("✅ Save Concert", use_container_width=True)
 
         if submitted:
-            if bands and venue and city:
+            if bands and venue and city and date_selection:
+                # --- PROCESAMIENTO DE LA FECHA ---
+                # Si seleccionan un rango, date_selection será una tupla (inicio, fin)
+                if isinstance(date_selection, (list, tuple)):
+                    if len(date_selection) == 2:
+                        final_date_val = f"{date_selection[0]} | {date_selection[1]}"
+                    else:
+                        final_date_val = str(date_selection[0])
+                else:
+                    final_date_val = str(date_selection)
+                # ---------------------------------
+
                 tags = process_tags(tags_input)
-                if save_concert(st.session_state.current_user, bands, date, venue, city, tags, info):
+                
+                # Guardamos usando la fecha procesada
+                if save_concert(st.session_state.current_user, bands, final_date_val, venue, city, tags, info):
                     show_success_message("✅ Concert added successfully!")
                     st.session_state.show_concert_form = False
                     st.rerun()
                 else:
-                    st.error("❌ Error saving")
+                    st.error("❌ Error saving to database")
             else:
-                st.warning("⚠️ Please complete all required fields")
+                st.warning("⚠️ Please complete the required fields: Bands, Date, Venue, and City")
 
 def render_concerts_list():
     """Load and display concerts"""

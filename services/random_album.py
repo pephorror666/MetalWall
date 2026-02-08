@@ -276,7 +276,7 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                                 tag_name = tag.item.get_name().lower().replace(' ', '')
                                 # Filter for metal-related tags
                                 if any(metal_keyword in tag_name for metal_keyword in 
-                                      ['metal', 'death', 'black', 'thrash', 'doom', 'grind', 'core']):
+                                      ['metal', 'death', 'thrash', 'doom', 'grind']):
                                     if tag_name not in discovery_tags and len(discovery_tags) < 5:
                                         discovery_tags.append(tag_name)
                     except Exception:

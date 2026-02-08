@@ -254,6 +254,37 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                 if is_valid and validated_album:
                     random_album_data = validated_album
                     
+                    # NEW: Extract tags from the discovered album
+                    discovery_tags = []
+                    
+                    # Get genres from Spotify and convert to tags
+                    if random_album_data.get('genres'):
+                        for genre in random_album_data['genres'][:3]:  # Limit to 3 genres
+                            # Clean genre and convert to tag format
+                            tag = genre.lower().replace(' ', '')
+                            if tag not in discovery_tags:
+                                discovery_tags.append(tag)
+                    
+                    # Also try to get tags from Last.fm
+                    try:
+                        if lastfm_client:
+                            # Get artist info from Last.fm for more specific metal tags
+                            artist = lastfm_client.get_artist(random_album_data["artist"])
+                            tags = artist.get_top_tags(limit=5)
+                            
+                            for tag in tags:
+                                tag_name = tag.item.get_name().lower().replace(' ', '')
+                                # Filter for metal-related tags
+                                if any(metal_keyword in tag_name for metal_keyword in 
+                                      ['metal', 'death', 'black', 'thrash', 'doom', 'grind', 'core']):
+                                    if tag_name not in discovery_tags and len(discovery_tags) < 5:
+                                        discovery_tags.append(tag_name)
+                    except Exception:
+                        pass
+                    
+                    # Add random discovery tag
+                    discovery_tags.append('randomdiscovery')
+                    
                     # Step 6: Try to find the album on Bandcamp
                     bandcamp_result = None
                     try:
@@ -270,7 +301,7 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                     except Exception:
                         pass
                     
-                    # Prepare discovery data
+                    # Prepare discovery data with tags
                     discovery_data = {
                         "origin": {
                             "album": random_album,
@@ -280,7 +311,8 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                         "discovery": random_album_data,
                         "bandcamp": bandcamp_result,
                         "description": f"Based on '{base_album_name}' by {base_artist_name} → Related artist: {random_artist}",
-                        "validation": "✅ Validated as metal"
+                        "validation": "✅ Validated as metal",
+                        "tags": discovery_tags  # NEW: Store tags for the discovered album
                     }
                     
                     # Save discovery to database if user is logged in
@@ -301,6 +333,15 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                     continue
             else:
                 # No Last.fm client, can't validate - just return what we have
+                # NEW: Still try to extract tags from Spotify genres
+                discovery_tags = []
+                if random_album_data.get('genres'):
+                    for genre in random_album_data['genres'][:3]:
+                        tag = genre.lower().replace(' ', '')
+                        if tag not in discovery_tags:
+                            discovery_tags.append(tag)
+                discovery_tags.append('randomdiscovery')
+                
                 bandcamp_result = None
                 try:
                     if random_album_data:
@@ -323,7 +364,8 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                     "discovery": random_album_data,
                     "bandcamp": bandcamp_result,
                     "description": f"Based on '{base_album_name}' by {base_artist_name} → Related artist: {random_artist}",
-                    "validation": "⚠️ Could not validate (Last.fm not available)"
+                    "validation": "⚠️ Could not validate (Last.fm not available)",
+                    "tags": discovery_tags  # NEW: Store tags
                 }
                 
                 return discovery_data, None

@@ -20,11 +20,13 @@ def get_artist_top_tags(lastfm_client, artist_name: str, limit: int = 3) -> List
         artist = lastfm_client.get_artist(artist_name)
         tags = artist.get_top_tags(limit=limit)
 
+        # Return tags with spaces replaced by hyphens (not removed!)
         return [
-            tag.item.get_name().lower().replace(" ", "")
+            tag.item.get_name().lower().replace(" ", "-")  # Change this line
             for tag in tags
         ]
-    except Exception:
+    except Exception as e:
+        print(f"Error getting artist tags: {e}")
         return []
 
 def get_random_album_from_wall() -> Optional[Dict]:

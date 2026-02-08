@@ -13,6 +13,7 @@ from services.metadata_extractor import extract_og_metadata
 from services.random_album import discover_random_album
 from utils.helpers import process_tags, show_success_message
 from admin.backup_tools import admin_backup_page
+from datetime import datetime
 
 def main_page():
     """Main app function that handles page routing"""
@@ -265,46 +266,49 @@ def gigs_page():
 def render_concert_form():
     """Render concert posting form con soporte para festivales"""
     with st.form("concert_form", clear_on_submit=True):
-        bands = st.text_input("Bands", placeholder="Separate with commas (e.g. Iron Maiden, Slayer)")
+        bands = st.text_input("Bands", placeholder="Separate with commas")
         
-        # El cambio clave: date_input puede recibir una tupla para habilitar rangos
+        # Al pasarle una tupla con dos fechas, Streamlit activa el modo "Rango"
+        # El usuario podrá marcar el inicio y el fin del festival
         date_selection = st.date_input(
             "Date", 
-            value=(datetime.now()), 
-            help="Click once for a single day, or select two dates for a festival range."
+            value=(datetime.now().date(), datetime.now().date()),
+            help="Click one day for a single gig, or two days for a festival range"
         )
         
         venue = st.text_input("Venue")
         city = st.text_input("City")
         tags_input = st.text_input("Tags", placeholder="Example: #deathmetal #liveshow")
-        info = st.text_area("Additional info", placeholder="Tickets, prices, full lineup...")
+        info = st.text_area("Additional info", placeholder="Tickets, prices, etc.")
         
+        # El botón de envío DEBE estar aquí para cerrar el formulario
         submitted = st.form_submit_button("✅ Save Concert", use_container_width=True)
 
         if submitted:
+            # Comprobamos que se han rellenado los campos y la fecha
             if bands and venue and city and date_selection:
-                # --- PROCESAMIENTO DE LA FECHA ---
-                # Si seleccionan un rango, date_selection será una tupla (inicio, fin)
+                # Procesamos la fecha (si es tupla de 2 fechas = Festival)
                 if isinstance(date_selection, (list, tuple)):
                     if len(date_selection) == 2:
-                        final_date_val = f"{date_selection[0]} | {date_selection[1]}"
+                        # Formato: "2026-06-15 | 2026-06-18"
+                        final_date_str = f"{date_selection[0]} | {date_selection[1]}"
                     else:
-                        final_date_val = str(date_selection[0])
+                        # Si solo seleccionó una fecha en el widget de rango
+                        final_date_str = str(date_selection[0])
                 else:
-                    final_date_val = str(date_selection)
-                # ---------------------------------
+                    final_date_str = str(date_selection)
 
                 tags = process_tags(tags_input)
                 
-                # Guardamos usando la fecha procesada
-                if save_concert(st.session_state.current_user, bands, final_date_val, venue, city, tags, info):
+                # Llamada a la base de datos (operations.py)
+                if save_concert(st.session_state.current_user, bands, final_date_str, venue, city, tags, info):
                     show_success_message("✅ Concert added successfully!")
                     st.session_state.show_concert_form = False
                     st.rerun()
                 else:
                     st.error("❌ Error saving to database")
             else:
-                st.warning("⚠️ Please complete the required fields: Bands, Date, Venue, and City")
+                st.warning("⚠️ Please complete all required fields (Bands, Date, Venue, City)")
 
 def render_concerts_list():
     """Load and display concerts"""

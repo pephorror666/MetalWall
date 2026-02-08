@@ -932,7 +932,11 @@ def random_album_page():
                     if st.session_state.current_user:
                         # Use the automatic post option with Spotify URL
                         url = discovery['url']
-                        tags_input = "#randomdiscovery"
+                        artist_tags = discovery_data.get("artist_tags", [])
+                        if artist_tags:
+                            tags_input = " ".join(f"#{t}" for t in artist_tags)
+                        else:
+                            tags_input = "#randomdiscovery"
                         
                         # Call the handle_album_submission function
                         success = handle_album_submission(url, tags_input, is_manual=False)

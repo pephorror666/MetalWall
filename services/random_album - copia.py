@@ -12,21 +12,6 @@ from services.spotify_service import get_spotify_client, get_related_artists_spo
 from services.lastfm_service import get_lastfm_client, get_related_artists_lastfm
 from services.bandcamp_service import bandcamp_search
 
-def get_artist_top_tags(lastfm_client, artist_name: str, limit: int = 3) -> List[str]:
-    if not lastfm_client:
-        return []
-
-    try:
-        artist = lastfm_client.get_artist(artist_name)
-        tags = artist.get_top_tags(limit=limit)
-
-        return [
-            tag.item.get_name().lower().replace(" ", "")
-            for tag in tags
-        ]
-    except Exception:
-        return []
-
 def get_random_album_from_wall() -> Optional[Dict]:
     """Get a random album from the wall"""
     try:
@@ -265,8 +250,6 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                 validated_album, is_valid = validate_and_correct_metal_album(
                     lastfm_client, random_album_data
                 )
-
-                artist_tags = get_artist_top_tags(lastfm_client,random_album_data["artist"],limit=3)
                 
                 if is_valid and validated_album:
                     random_album_data = validated_album
@@ -296,7 +279,6 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                         },
                         "discovery": random_album_data,
                         "bandcamp": bandcamp_result,
-                        "artist_tags": artist_tags,
                         "description": f"Based on '{base_album_name}' by {base_artist_name} → Related artist: {random_artist}",
                         "validation": "✅ Validated as metal"
                     }

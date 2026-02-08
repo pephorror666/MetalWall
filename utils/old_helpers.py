@@ -62,25 +62,8 @@ def process_tags(tags_str: str) -> List[str]:
         if tag:
             if tag.startswith('#'):
                 tag = tag[1:]
-            
-            # Clean the tag: lowercase and remove extra whitespace
-            tag = tag.lower().strip()
-            
-            # Allow letters, numbers, hyphens, and underscores
-            # Remove any characters that aren't alphanumeric, hyphen, or underscore
-            tag = ''.join(c for c in tag if c.isalnum() or c in '-_')
-            
-            # Only add if not empty and not too long
-            if tag and len(tag) <= 30:
-                # Remove multiple consecutive hyphens
-                while '--' in tag:
-                    tag = tag.replace('--', '-')
-                # Remove leading/trailing hyphens/underscores
-                tag = tag.strip('-_')
-                if tag and tag not in tags:
-                    tags.append(tag)
-    
-    # Limit to 5 tags
+            if tag.replace('_', '').isalnum():
+                tags.append(tag)
     return tags[:5]
 
 def show_success_message(message: str):

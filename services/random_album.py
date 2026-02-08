@@ -368,7 +368,6 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                     "tags": discovery_tags  # NEW: Store tags
                 }
                 
-                st.warning("OK")
                 return discovery_data, None
         
         # If we get here, we couldn't find a valid metal album after max attempts

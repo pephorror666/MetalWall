@@ -273,28 +273,9 @@ def render_concert_form():
         info = st.text_area("Additional info", placeholder="Tickets, prices, etc.")
         submitted = st.form_submit_button("✅ Save Concert", use_container_width=True)
 
-#########################
-        # --- Dentro del formulario de añadir concierto ---
-        # Permitimos selección de rango con is_range=True
-        date_range = st.date_input("Date")
-
-        # Procesamos la selección antes de guardar
-        if isinstance(date_range, (list, tuple)):
-            if len(date_range) == 2:
-                # Es un festival: "YYYY-MM-DD | YYYY-MM-DD"
-                final_date_val = f"{date_range[0]} | {date_range[1]}"
-            else:
-                # Selección incompleta o un solo día
-                final_date_val = str(date_range[0])
-        else:
-            final_date_val = str(date_range)
-
-###########################
-
         if submitted:
             if bands and venue and city:
                 tags = process_tags(tags_input)
-                date=final_date_val, # <--- Enviamos el string procesado
                 if save_concert(st.session_state.current_user, bands, date, venue, city, tags, info):
                     show_success_message("✅ Concert added successfully!")
                     st.session_state.show_concert_form = False

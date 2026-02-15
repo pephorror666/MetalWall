@@ -1,6 +1,6 @@
 # File: metalwall_app/services/random_album.py
 # ===========================
-# RANDOM ALBUM DISCOVERY SERVICE (ULTRA-STRICT VERSION)
+# RANDOM ALBUM DISCOVERY SERVICE (ULTRA-STRICT VERSION 2.0)
 # ===========================
 
 import streamlit as st
@@ -19,82 +19,74 @@ def clean_strictly(text: str) -> str:
     return re.sub(r'[^a-z0-9]', '', text.lower())
 
 def is_metal_artist(lastfm_client, artist_name: str) -> bool:
-    """Verifica si un artista es metal usando tags de Last.fm con filtrado estricto."""
+    """Verifica si un artista es metal con filtrado de etiquetas y protección de identidad."""
     if not lastfm_client:
         return False
     try:
+        # Last.fm suele "autocorregir" nombres (ej. Taake -> Taaken). 
+        # Obtenemos el objeto sin permitir redirecciones automáticas si es posible,
+        # o verificamos el nombre final.
         artist = lastfm_client.get_artist(artist_name)
         
-        # --- FIX: IDENTITY VERIFICATION ---
-        # Last.fm a veces corrige "Taake" a "Taaken" automáticamente. 
-        # Verificamos que el nombre que devuelve Last.fm sea el mismo que pedimos.
+        # VALIDACIÓN DE IDENTIDAD EN LAST.FM
         if clean_strictly(artist.get_name()) != clean_strictly(artist_name):
             return False
 
-        tags = artist.get_top_tags(limit=15)
+        tags = artist.get_top_tags(limit=20)
         tag_names = [tag.item.get_name().lower() for tag in tags]
         
         metal_keywords = [
             'metal', 'grindcore', 'goregrind', 'deathcore', 'sludge', 
-            'thrash', 'death metal', 'black metal', 'doom metal'
+            'thrash', 'death metal', 'black metal', 'doom metal', 'stoner'
         ]
         
-        # Agregamos 'musical' y 'soundtrack' a la lista negra para evitar casos como "Lik"
-        excluded_genres = ['pop', 'jazz', 'rnb', 'house', 'techno', 'musical', 'soundtrack', 'broadway']
+        # Bloqueo total de géneros que causan falsos positivos
+        excluded_genres = ['pop', 'jazz', 'rnb', 'house', 'techno', 'musical', 'soundtrack', 'broadway', 'easy listening']
         
         has_metal_tag = any(any(k in tag for k in metal_keywords) for tag in tag_names)
         has_pop_tag = any(any(e == tag for e in excluded_genres) for tag in tag_names)
         
-        # Solo es metal si tiene el tag y NO tiene tags de géneros excluidos (a menos que el tag incluya 'metal')
+        # Un artista es válido si tiene tags de metal y no está "contaminado" por géneros excluidos
+        # (a menos que el tag excluido forme parte de una etiqueta de metal, ej. "heavy metal pop" - poco común pero posible)
         return has_metal_tag and not (has_pop_tag and not 'metal' in "".join(tag_names))
     except:
         return False
 
 def validate_identity_and_genre(lastfm_client, result_data: Dict, target_artist: str) -> bool:
     """
-    Verifica que el artista retornado sea EXACTAMENTE el buscado y que sea metal.
+    Verifica que el resultado sea del artista buscado y pertenezca al género.
     """
     if not result_data:
         return False
     
-    # 1. Validación de Identidad (Nombre)
-    # Comparamos el artista que Spotify REALMENTE devolvió con nuestro objetivo.
+    # 1. VERIFICACIÓN DE IDENTIDAD (CRÍTICO)
+    # Comparamos el artista que Spotify DEVOLVIÓ con el que ESTÁBAMOS BUSCANDO.
+    # Esto evita que "The Silver" devuelva "The Beatles" o "Narco" devuelva "Narcotic Thrust".
     name_found = clean_strictly(result_data.get('artist', ''))
     name_target = clean_strictly(target_artist)
     
-    # Si no hay coincidencia exacta, rechazamos (Evita Narco vs Narcotic Thrust)
     if name_found != name_target:
         return False
 
-    # 2. Verificación de "Secuestro de Álbum" 
-    # (Evita que "The Silver" devuelva "Rubber Soul" de The Beatles)
-    # Si el álbum es extremadamente famoso y no cuadra, es un falso positivo.
+    # 2. VERIFICACIÓN DE ÁLBUM SOSPECHOSO
+    # Si el álbum contiene palabras clave de musicales o bandas sonoras, lo rechazamos.
     album_name = result_data.get('album', '').lower()
-    suspicious_keywords = ['remastered', 'greatest hits', 'anthology', 'musical']
-    if any(k in album_name for k in suspicious_keywords):
-        # Si el nombre del álbum es sospechoso, somos el doble de estrictos con el género
-        pass
-
-    # 3. Validación de Género (Metal)
-    spotify_genres = [g.lower() for g in result_data.get('genres', [])]
-    
-    # Lista negra de géneros de Spotify
-    blacklist = ['pop', 'dance pop', 'house', 'musical', 'broadway', 'soundtrack', 'classical']
-    is_blacklisted = any(any(b in g for b in blacklist) for g in spotify_genres)
-    
-    is_metal_on_spotify = any('metal' in g or 'grindcore' in g or 'death' in g for g in spotify_genres)
-    
-    # Si Spotify dice que es Pop/Musical y no menciona Metal, fuera.
-    if is_blacklisted and not is_metal_on_spotify:
+    if any(k in album_name for k in ['musical', 'soundtrack', 'cast recording', 'broadway']):
         return False
 
-    if is_metal_on_spotify:
-        # Aun si Spotify dice Metal, si el nombre del álbum es de un clásico, 
-        # verificamos con Last.fm para estar 100% seguros.
-        if lastfm_client:
-            return is_metal_artist(lastfm_client, target_artist)
+    # 3. VERIFICACIÓN DE GÉNERO
+    spotify_genres = [g.lower() for g in result_data.get('genres', [])]
+    
+    # Si Spotify tiene géneros, buscamos keywords de metal
+    is_metal_on_spotify = any('metal' in g or 'grindcore' in g or 'death' in g or 'doom' in g for g in spotify_genres)
+    
+    # Si Spotify explícitamente dice que es un género no deseado
+    is_non_metal = any(any(x in g for x in ['pop', 'hip hop', 'house', 'musical']) for g in spotify_genres)
+
+    if is_metal_on_spotify and not is_non_metal:
         return True
         
+    # En caso de duda (o falta de géneros en Spotify), recurrimos a Last.fm
     if lastfm_client:
         return is_metal_artist(lastfm_client, target_artist)
         
@@ -102,14 +94,14 @@ def validate_identity_and_genre(lastfm_client, result_data: Dict, target_artist:
 
 def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Optional[Dict] = None, 
                          max_attempts: int = 15) -> Tuple[Optional[Dict], Optional[str]]:
-    """Discovery con verificación de identidad estricta y reintentos mejorados."""
+    """Discovery con validación cruzada entre Spotify y Last.fm."""
     try:
         spotify_client = get_spotify_client()
         lastfm_client = get_lastfm_client()
         
         if base_album_obj is None:
             random_album = get_random_album_from_wall()
-            if not random_album: return None, "No albums found"
+            if not random_album: return None, "No base albums found in database."
         else:
             random_album = base_album_obj
         
@@ -122,6 +114,7 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
         related_artists = []
         if spotify_client:
             related_artists = get_related_artists_spotify(spotify_client, base_artist_name)
+        
         if not related_artists and lastfm_client:
             related_artists = get_related_artists_lastfm(lastfm_client, base_artist_name)
         
@@ -133,22 +126,19 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
             attempts += 1
             random_artist = random.choice(related_artists)
             
-            # Evitar recomendar al mismo artista original
+            # Evitamos recomendar al mismo artista del que partimos
             if clean_strictly(random_artist) == clean_strictly(base_artist_name):
                 continue
 
             random_album_data = None
             if spotify_client:
+                # Obtenemos un álbum aleatorio del artista seleccionado
                 random_album_data = get_random_album_by_artist(spotify_client, random_artist)
             
-            # VALIDACIÓN CRÍTICA
+            # --- VALIDACIÓN ESTRICTA ---
             if random_album_data and validate_identity_and_genre(lastfm_client, random_album_data, random_artist):
                 
-                # Doble check: ¿El nombre del artista en la metadata de Spotify coincide con el que elegimos?
-                # Esto mata definitivamente el error "The Silver -> Beatles"
-                if clean_strictly(random_album_data.get('artist')) != clean_strictly(random_artist):
-                    continue
-
+                # Procesamiento de Tags
                 discovery_tags = []
                 if random_album_data.get('genres'):
                     discovery_tags = [g.lower().replace(' ', '') for g in random_album_data['genres'][:3]]
@@ -158,12 +148,13 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                     tags = lfm_artist.get_top_tags(limit=5)
                     for t in tags:
                         t_name = t.item.get_name().lower().replace(' ', '')
-                        if any(k in t_name for k in ['metal', 'death', 'thrash', 'doom', 'grind']):
+                        if any(k in t_name for k in ['metal', 'death', 'thrash', 'doom', 'grind', 'sludge']):
                             if t_name not in discovery_tags: discovery_tags.append(t_name)
                 except: pass
                 
                 discovery_tags.append('randomdiscovery')
                 
+                # Búsqueda en Bandcamp
                 bandcamp_result = None
                 try:
                     bc_res = bandcamp_search(random_album_data["artist"], random_album_data["album"])
@@ -176,7 +167,7 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                     "discovery": random_album_data,
                     "bandcamp": bandcamp_result,
                     "description": f"Based on '{base_album_name}' by {base_artist_name} → Related: {random_album_data['artist']}",
-                    "validation": "✅ Verified Identity & Metal Genre",
+                    "validation": "✅ Identity and Genre verified",
                     "tags": discovery_tags
                 }
                 
@@ -193,10 +184,10 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                 
                 return discovery_data, None
             
-        return None, f"Could not find a confirmed metal album after {max_attempts} attempts."
+        return None, f"Could not find a valid metal album after {max_attempts} attempts."
         
     except Exception as e:
-        return None, f"Error: {str(e)}"
+        return None, f"Discovery error: {str(e)}"
 
 def get_random_album_from_wall() -> Optional[Dict]:
     """Carga un álbum aleatorio de la base de datos."""

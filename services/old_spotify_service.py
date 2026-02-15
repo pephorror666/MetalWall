@@ -1,6 +1,6 @@
 # File: metalwall_app/services/spotify_service.py
 # ===========================
-# SPOTIFY API SERVICE (REFINED)
+# SPOTIFY API SERVICE
 # ===========================
 
 import streamlit as st
@@ -17,7 +17,7 @@ def get_spotify_client():
         client_secret = st.secrets.get("SPOTIFY_CLIENT_SECRET", "")
         
         if not client_id or not client_secret:
-            st.warning("⚠️ Spotify API credentials not found.")
+            st.warning("⚠️ Spotify API credentials not found. Random Album feature will use limited functionality.")
             return None
         
         auth_manager = SpotifyClientCredentials(
@@ -32,62 +32,61 @@ def get_spotify_client():
 def get_related_artists_spotify(spotify_client, artist_name: str) -> List[str]:
     """Find related artists using Spotify API"""
     artist_name = clean_artist_name(artist_name)
+    
     try:
-        if not spotify_client: return []
-        # Use quotes for more precise matching
-        results = spotify_client.search(q=f'artist:"{artist_name}"', type="artist", limit=1)
+        if not spotify_client:
+            return []
+        
+        results = spotify_client.search(q=f"artist:{artist_name}", type="artist", limit=1)
         artists = results.get("artists", {}).get("items", [])
         
-        if not artists: return []
+        if not artists:
+            return []
         
         artist_id = artists[0]["id"]
         related_artists = spotify_client.artist_related_artists(artist_id)
-        return [artist["name"] for artist in related_artists.get("artists", [])[:15]]
-    except:
+        
+        return [artist["name"] for artist in related_artists.get("artists", [])[:10]]
+    except Exception as e:
+        print(f"Error getting related artists from Spotify: {e}")
         return []
 
 def get_random_album_by_artist(spotify_client, artist_name: str) -> Optional[Dict]:
-    """Get a random album by an artist with strict name verification"""
-    clean_name = clean_artist_name(artist_name)
+    """Get a random album by an artist from Spotify"""
+    artist_name = clean_artist_name(artist_name)
+    
     try:
-        if not spotify_client: return None
+        if not spotify_client:
+            return None
         
-        # 1. Search for albums by the exact artist name
-        results = spotify_client.search(q=f'artist:"{clean_name}"', type="album", limit=30)
+        results = spotify_client.search(q=f"artist:{artist_name}", type="album", limit=20)
         albums = results.get("albums", {}).get("items", [])
-        if not albums: return None
         
-        # 2. Filter albums to ensure they actually belong to the target artist 
-        # (Avoids "The Silver" matching "The Beatles")
-        valid_albums = [
-            a for a in albums 
-            if any(clean_name.lower() == art["name"].lower() for art in a["artists"])
-        ]
+        if not albums:
+            return None
         
-        if not valid_albums: return None
-        random_album = random.choice(valid_albums)
+        # Pick random album
+        random_album = random.choice(albums)
         
-        # 3. Get full details including genres (which are on the Artist object, not Album)
+        # Get full album details
         album_id = random_album["id"]
         album_details = spotify_client.album(album_id)
         
-        # Fetch artist genres since album.genres is usually empty
-        artist_id = album_details["artists"][0]["id"]
-        artist_info = spotify_client.artist(artist_id)
-        
         return {
-            "artist": album_details["artists"][0]["name"], # THE FIX: Get real name from Spotify
+            "artist": artist_name,
             "album": album_details["name"],
             "image": album_details["images"][0]["url"] if album_details.get("images") else None,
             "url": album_details["external_urls"]["spotify"],
             "release_date": album_details.get("release_date", "Unknown"),
-            "genres": artist_info.get("genres", [])
+            "total_tracks": album_details.get("total_tracks", 0),
+            "genres": album_details.get("genres", [])
         }
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error getting random album from Spotify: {e}")
         return None
 
 def clean_artist_name(artist_name: str) -> str:
+    """Clean artist name by removing platform-specific suffixes"""
     suffixes = [" | Spotify", "Album by ", "EP by ", "Single by "]
     for suffix in suffixes:
         artist_name = artist_name.replace(suffix, "")
